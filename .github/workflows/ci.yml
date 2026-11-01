@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Typecheck, test bazy, bundle
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      EXPO_NO_TELEMETRY: 1
+    steps:
+      - uses: actions/checkout@v4
+
+      # Node 22: test trwałości używa wbudowanego modułu node:sqlite
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            backend/package-lock.json
+
+      - name: Instalacja zależności (aplikacja)
+        run: npm ci
+
+      - name: Instalacja zależności (backend)
+        run: npm ci
+        working-directory: backend
+
+      - name: Typecheck aplikacji
+        run: npx tsc --noEmit
+
+      - name: Typecheck backendu
+        run: npx tsc --noEmit
+        working-directory: backend
+
+      - name: Test trwałości bazy (zapis, restart, edycja, usuwanie)
+        run: npm run test:db
+
+      - name: Próbny bundle Android i iOS (Metro)
+        run: npx expo export --platform android --platform ios --output-dir dist-ci
