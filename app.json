@@ -16,10 +16,7 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false,
-      "permissions": [
-        "android.permission.RECORD_AUDIO"
-      ]
+      "predictiveBackGestureEnabled": false
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -31,17 +28,13 @@
         "expo-image-picker",
         {
           "photosPermission": "Aplikacja potrzebuje dostępu do zdjęć, aby analizować posiłki.",
-          "cameraPermission": "Aplikacja potrzebuje aparatu, aby fotografować posiłki."
+          "cameraPermission": "Aplikacja potrzebuje aparatu, aby fotografować posiłki.",
+          "microphonePermission": false
         }
       ]
     ],
     "scheme": "calai",
     "extra": {
-      "router": {
-        "asyncRoutes": {
-          "web": true
-        }
-      },
       "eas": {
         "projectId": "9eccb265-bc2e-4eb1-8ce4-28bf32c6aa2a"
       }
