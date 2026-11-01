@@ -38,3 +38,19 @@ export function deletePhoto(fileName: string | null | undefined): void {
     console.warn('Nie udało się usunąć zdjęcia', e);
   }
 }
+
+/**
+ * Usuwa plik tymczasowy (np. zdjęcie z aparatu albo pomniejszoną kopię), ale tylko jeśli leży
+ * w katalogu cache aplikacji – nigdy nie dotyka oryginałów z galerii.
+ */
+export function deleteTempFile(uri: string | null | undefined): void {
+  if (!uri || Platform.OS === 'web') return;
+  try {
+    const cacheUri = Paths.cache.uri;
+    if (!uri.startsWith(cacheUri)) return;
+    const f = new File(uri);
+    if (f.exists) f.delete();
+  } catch (e) {
+    console.warn('Nie udało się usunąć pliku tymczasowego', e);
+  }
+}

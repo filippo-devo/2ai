@@ -50,7 +50,9 @@ jobs:
         working-directory: backend
 
       - name: Test trwałości bazy (zapis, restart, edycja, usuwanie)
-        run: npm run test:db
+        run: |
+          npm run test:db
+          npm run test:claude
 
       - name: Próbny bundle Android i iOS (Metro)
         run: npx expo export --platform android --platform ios --output-dir dist-ci

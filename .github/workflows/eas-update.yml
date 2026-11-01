@@ -48,6 +48,7 @@ jobs:
         run: |
           npm run typecheck
           npm run test:db
+          npm run test:claude
 
       - name: Publikacja EAS Update (gałąź main)
         run: |

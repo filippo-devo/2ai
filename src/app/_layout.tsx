@@ -29,7 +29,8 @@ export default function RootLayout() {
             contentStyle: { backgroundColor: colors.bg },
           }}
         >
-          <Stack.Screen name="index" options={{ title: 'CalAI' }} />
+          <Stack.Screen name="index" options={{ title: 'Ile to ma kalorii?' }} />
+          <Stack.Screen name="diary" options={{ title: 'Dziennik' }} />
           <Stack.Screen name="day/[date]" options={{ title: 'Dzień' }} />
           <Stack.Screen name="history" options={{ title: 'Historia' }} />
           <Stack.Screen name="settings" options={{ title: 'Cele i ustawienia' }} />

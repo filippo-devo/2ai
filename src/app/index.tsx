@@ -1,26 +1,202 @@
+import * as ImagePicker from 'expo-image-picker';
 import { router, Stack } from 'expo-router';
-import { Pressable, Text, View } from 'react-native';
-import { DayView } from '../components/DayView';
-import { todayString } from '../lib/dates';
+import { useSQLiteContext } from 'expo-sqlite';
+import { useState } from 'react';
+import { Alert, Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Badge, Button, Card, colors, styles } from '../components/ui';
+import { getBackendUrl } from '../db/repo';
+import { analyzePhoto, ApiError, type AnalysisResult } from '../lib/api';
+import { analyzeWithClaude } from '../lib/claude';
+import { newKey } from '../lib/draft';
+import { prepareImage } from '../lib/image';
+import { fmtG, fmtKcal } from '../lib/nutrition';
+import { deleteTempFile } from '../lib/photos';
+import { session, useSession, type QuickEntry } from '../lib/session';
 
-export default function TodayScreen() {
+const CONFIDENCE: Record<string, string> = { low: 'niska', medium: 'średnia', high: 'wysoka' };
+
+/**
+ * Szybka analiza: zdjęcie → kalorie. Nic nie jest zapisywane – zdjęcia, wyniki i klucz API
+ * są tylko w pamięci i znikają po zamknięciu aplikacji.
+ */
+export default function QuickScreen() {
+  const db = useSQLiteContext();
+  const { apiKey, entries } = useSession();
+  const [keyInput, setKeyInput] = useState('');
+  const [hint, setHint] = useState('');
+
+  async function pick(fromCamera: boolean) {
+    try {
+      let result: ImagePicker.ImagePickerResult;
+      if (fromCamera) {
+        const perm = await ImagePicker.requestCameraPermissionsAsync();
+        if (!perm.granted) {
+          Alert.alert('Brak dostępu do aparatu', 'Zezwól Expo Go na dostęp do aparatu w ustawieniach telefonu albo wybierz zdjęcie z galerii.');
+          return;
+        }
+        result = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 1 });
+      } else {
+        result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
+      }
+      if (result.canceled || !result.assets?.[0]) return;
+      await analyze(result.assets[0]);
+    } catch (e) {
+      Alert.alert('Nie udało się pobrać zdjęcia', String(e));
+    }
+  }
+
+  async function analyze(asset: ImagePicker.ImagePickerAsset) {
+    const id = newKey();
+    const at = Date.now();
+    let image = asset.uri;
+    session.add({ id, at, image, status: 'analyzing' });
+    try {
+      const prepared = await prepareImage(asset.uri, asset.width, asset.height);
+      // Zdjęcie trzymamy tylko w pamięci (data URI), a pliki tymczasowe od razu usuwamy.
+      image = `data:image/jpeg;base64,${prepared.base64}`;
+      deleteTempFile(prepared.uri);
+      deleteTempFile(asset.uri);
+      session.update({ id, at, image, status: 'analyzing' });
+
+      const text = hint;
+      setHint('');
+      let result: AnalysisResult;
+      if (apiKey) {
+        result = await analyzeWithClaude(apiKey, prepared.base64, text);
+      } else {
+        const backendUrl = (await getBackendUrl(db)) ?? '';
+        result = await analyzePhoto(backendUrl, prepared.base64, text);
+      }
+      session.update({ id, at, image, status: 'done', result });
+    } catch (e) {
+      const err = e instanceof ApiError ? e : new ApiError('UNKNOWN', String(e));
+      session.update({ id, at, image, status: 'error', code: err.code, message: err.message });
+      if (err.code === 'API_KEY_INVALID') session.setApiKey(null);
+    }
+  }
+
+  const needsKey = !apiKey;
+
   return (
-    <>
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <Stack.Screen
         options={{
+          title: 'Ile to ma kalorii?',
           headerRight: () => (
-            <View style={{ flexDirection: 'row', gap: 16 }}>
-              <Pressable onPress={() => router.push('/history')} hitSlop={8}>
-                <Text style={{ fontSize: 15, fontWeight: '600' }}>Historia</Text>
-              </Pressable>
-              <Pressable onPress={() => router.push('/settings')} hitSlop={8}>
-                <Text style={{ fontSize: 15, fontWeight: '600' }}>Ustawienia</Text>
-              </Pressable>
-            </View>
+            <Pressable onPress={() => router.push('/diary')} hitSlop={8}>
+              <Text style={{ fontSize: 15, fontWeight: '600' }}>Dziennik</Text>
+            </Pressable>
           ),
         }}
       />
-      <DayView initialDay={todayString()} showNav />
-    </>
+      <ScrollView style={styles.screen} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+        {needsKey ? (
+          <Card>
+            <Text style={styles.h2}>Klucz API Anthropic</Text>
+            <Text style={styles.muted}>
+              Wklej klucz (sk-ant-…) z platform.claude.com → API Keys. Klucz jest trzymany tylko w pamięci i znika po zamknięciu
+              aplikacji.
+            </Text>
+            <TextInput
+              style={styles.input}
+              value={keyInput}
+              onChangeText={setKeyInput}
+              placeholder="sk-ant-..."
+              autoCapitalize="none"
+              autoCorrect={false}
+              secureTextEntry
+            />
+            <Button
+              title="Użyj klucza"
+              disabled={keyInput.trim().length < 20}
+              onPress={() => {
+                session.setApiKey(keyInput.trim());
+                setKeyInput('');
+              }}
+            />
+            <Text style={styles.muted}>Masz uruchomiony własny backend? Możesz pominąć klucz – wtedy użyty zostanie adres z Dziennik → Ustawienia.</Text>
+          </Card>
+        ) : (
+          <View style={[styles.row, { justifyContent: 'space-between' }]}>
+            <Text style={styles.muted}>Klucz API aktywny (tylko do zamknięcia aplikacji)</Text>
+            <Pressable onPress={() => session.setApiKey(null)} hitSlop={8}>
+              <Text style={{ color: colors.danger, fontWeight: '600' }}>Usuń klucz</Text>
+            </Pressable>
+          </View>
+        )}
+
+        <Button title="📷 Zrób zdjęcie" onPress={() => pick(true)} style={{ paddingVertical: 18 }} disabled={Platform.OS === 'web'} />
+        <Button title="🖼️ Wybierz z galerii" variant="secondary" onPress={() => pick(false)} />
+        <TextInput
+          style={styles.input}
+          value={hint}
+          onChangeText={setHint}
+          placeholder="Opcjonalnie: opis, np. „owsianka na mleku 2%”"
+          placeholderTextColor={colors.muted}
+          maxLength={300}
+        />
+
+        {entries.map((e) => (
+          <EntryCard key={e.id} entry={e} />
+        ))}
+
+        {entries.length > 0 && <Button title="Wyczyść wyniki" variant="secondary" onPress={() => session.clear()} />}
+
+        <Text style={[styles.muted, { textAlign: 'center' }]}>
+          Nic nie jest zapisywane: zdjęcia i wyniki są tylko w pamięci i znikają po zamknięciu aplikacji. Zdjęcie jest wysyłane do
+          Anthropic wyłącznie w celu analizy. Wartości są szacunkowe.
+        </Text>
+      </ScrollView>
+    </KeyboardAvoidingView>
+  );
+}
+
+function EntryCard({ entry }: { entry: QuickEntry }) {
+  return (
+    <Card style={entry.status === 'error' ? { borderColor: colors.danger } : undefined}>
+      <View style={[styles.row, { alignItems: 'flex-start' }]}>
+        <Image source={{ uri: entry.image }} style={{ width: 84, height: 84, borderRadius: 10, backgroundColor: '#EEE' }} />
+        <View style={{ flex: 1, gap: 4 }}>
+          {entry.status === 'analyzing' && <Text style={styles.text}>Analizuję… (zwykle 10–40 s)</Text>}
+          {entry.status === 'error' && (
+            <>
+              <Text style={[styles.h2, { color: colors.danger }]}>Nie udało się</Text>
+              <Text style={styles.text}>{entry.message}</Text>
+            </>
+          )}
+          {entry.status === 'done' && (
+            <>
+              <Text style={styles.h2} numberOfLines={2}>
+                {entry.result.mealName}
+              </Text>
+              <Text style={{ fontSize: 30, fontWeight: '800', color: colors.text }}>≈ {fmtKcal(entry.result.totals.kcal)} kcal</Text>
+              <Text style={styles.muted}>
+                B {fmtG(entry.result.totals.protein)} g · W {fmtG(entry.result.totals.carbs)} g · T {fmtG(entry.result.totals.fat)} g
+              </Text>
+            </>
+          )}
+        </View>
+        <Pressable onPress={() => session.remove(entry.id)} hitSlop={10} accessibilityLabel="Usuń wynik">
+          <Text style={{ color: colors.muted, fontSize: 18 }}>✕</Text>
+        </Pressable>
+      </View>
+      {entry.status === 'done' && (
+        <View style={{ gap: 4, marginTop: 4 }}>
+          {entry.result.items.map((it, i) => (
+            <View key={i} style={[styles.row, { justifyContent: 'space-between' }]}>
+              <Text style={[styles.text, { flex: 1 }]} numberOfLines={1}>
+                {it.name} · {it.grams} g
+              </Text>
+              <Text style={[styles.text, { fontWeight: '600' }]}>{fmtKcal(it.totals.kcal)} kcal</Text>
+            </View>
+          ))}
+          <View style={[styles.row, { marginTop: 4 }]}>
+            <Badge text="SZACUNEK AI" />
+            <Text style={styles.muted}>pewność: {CONFIDENCE[entry.result.confidence] ?? entry.result.confidence}</Text>
+          </View>
+          {!!entry.result.notes && <Text style={styles.muted}>{entry.result.notes}</Text>}
+        </View>
+      )}
+    </Card>
   );
 }

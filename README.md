@@ -12,6 +12,18 @@ Wszystkie dane są zapisywane **lokalnie na telefonie**. Do analizy zdjęć słu
 └──────────────────────────────┘               └──────────────────────────┘
 ```
 
+## Najprościej: zdjęcie → kalorie (bez zapisywania)
+
+Ekran startowy **„Ile to ma kalorii?”** działa bez backendu i bez komputera:
+
+1. Otwórz aplikację w Expo Go (Home → Projects → calai-mvp).
+2. Wklej klucz API Anthropic (`sk-ant-…`, z platform.claude.com → API Keys) i stuknij **Użyj klucza**.
+3. **📷 Zrób zdjęcie** albo **🖼️ Wybierz z galerii**. Po kilkunastu sekundach zobaczysz nazwę posiłku, łączne kalorie (szacunek), makro i rozbicie na składniki.
+
+**Nic nie jest zapisywane.** Klucz API, zdjęcia i wyniki są trzymane tylko w pamięci i znikają po zamknięciu aplikacji. Pliki tymczasowe z aparatu są usuwane od razu po przygotowaniu zdjęcia. Zdjęcie jest wysyłane bezpośrednio z telefonu do Anthropic wyłącznie w celu analizy. Oficjalne SDK Anthropic nie obsługuje React Native, dlatego aplikacja wywołuje API bezpośrednio przez HTTPS.
+
+Pełny dziennik z zapisywaniem posiłków, celami i historią (opisany niżej) jest nadal dostępny pod przyciskiem **Dziennik**. Szybka analiza nic do niego nie dopisuje.
+
 ## Funkcje
 
 - Dzienne podsumowanie kalorii, białka, węglowodanów i tłuszczów z paskami postępu względem celów.
