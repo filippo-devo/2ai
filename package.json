@@ -34,7 +34,7 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tests",
     "test:db": "tsx tests/db-persistence.test.ts",
     "lint": "expo lint"
   },

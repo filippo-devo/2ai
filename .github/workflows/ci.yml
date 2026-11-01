@@ -43,7 +43,7 @@ jobs:
         run: npx expo lint
 
       - name: Typecheck aplikacji
-        run: npx tsc --noEmit
+        run: npm run typecheck
 
       - name: Typecheck backendu
         run: npx tsc --noEmit

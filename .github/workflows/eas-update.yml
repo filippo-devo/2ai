@@ -46,7 +46,7 @@ jobs:
 
       - name: Typecheck i test bazy przed publikacją
         run: |
-          npx tsc --noEmit
+          npm run typecheck
           npm run test:db
 
       - name: Publikacja EAS Update (gałąź main)
