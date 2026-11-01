@@ -39,6 +39,9 @@ jobs:
         run: npm ci
         working-directory: backend
 
+      - name: Lint aplikacji
+        run: npx expo lint
+
       - name: Typecheck aplikacji
         run: npx tsc --noEmit
 

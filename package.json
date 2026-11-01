@@ -13,6 +13,7 @@
     "expo-router": "~58.0.29",
     "expo-sqlite": "~58.0.15",
     "expo-status-bar": "~58.0.4",
+    "expo-updates": "~58.0.20",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "react-native": "0.88.1",
@@ -23,6 +24,8 @@
   "devDependencies": {
     "@types/node": "^26.6.6",
     "@types/react": "~19.3.0",
+    "eslint": "^9.0.0",
+    "eslint-config-expo": "~58.0.4",
     "tsx": "^4.23.15",
     "typescript": "~6.0.3"
   },
@@ -32,7 +35,8 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
-    "test:db": "tsx tests/db-persistence.test.ts"
+    "test:db": "tsx tests/db-persistence.test.ts",
+    "lint": "expo lint"
   },
   "private": true
 }

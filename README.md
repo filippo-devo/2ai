@@ -84,6 +84,22 @@ W terminalu pojawi się **kod QR**:
 
 Jeśli telefon nie może połączyć się z Metro (np. przez izolację klientów w sieci Wi-Fi), spróbuj `npx expo start --tunnel`. Tunel dotyczy tylko kodu aplikacji. Backend nadal musi być osiągalny w sieci lokalnej.
 
+### 2b. Aplikacja w Expo Go bez uruchamiania komputera (EAS Update)
+
+Projekt jest połączony z kontem Expo (`@filiocha/calai-mvp`). Każdy push na `main` uruchamia workflow **EAS Update**, który publikuje aktualną wersję aplikacji na expo.dev. Workflow korzysta z sekretu `EXPO_TOKEN` w repozytorium.
+
+Jak otworzyć aplikację:
+- **Expo Go → zaloguj się na konto `filiocha` → Home → Projects → calai-mvp** i wybierz najnowszą aktualizację z gałęzi `main`;
+- albo na **expo.dev → Projects → calai-mvp → Updates** otwórz aktualizację i zeskanuj kod QR z podglądu.
+
+Opublikowana wersja nie potrzebuje `npx expo start`. Backend do analizy zdjęć nadal działa lokalnie na komputerze w tej samej sieci Wi-Fi. Dane opublikowanej wersji są zapisywane w Expo Go, tak samo jak przy `npx expo start`.
+
+Ręczna publikacja z komputera (po `npx eas-cli@latest login`):
+
+```bash
+npx eas-cli@latest update --branch main --message "opis zmian" --environment preview
+```
+
 ### 3. Połączenie aplikacji z backendem
 
 W aplikacji: **Ustawienia → Backend do analizy zdjęć** → wpisz adres wypisany przez backend (np. `192.168.1.20:3001`; brakujące `http://` i port `3001` zostaną dodane automatycznie) → **Testuj połączenie**.

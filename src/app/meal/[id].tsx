@@ -23,15 +23,10 @@ export default function MealScreen() {
   const db = useSQLiteContext();
   const params = useLocalSearchParams<{ id: string; draft?: string; day?: string }>();
   const isNew = params.id === 'new';
-  const [meal, setMeal] = useState<MealDraft | null>(null);
-  const [notFound, setNotFound] = useState(false);
-  const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    if (isNew) {
-      const fromAi = getDraft(params.draft);
-      setMeal(
-        fromAi ?? {
+  // Nowy posiłek: szkic z analizy AI albo pusty formularz – liczony raz przy montowaniu ekranu.
+  const [meal, setMeal] = useState<MealDraft | null>(() =>
+    isNew
+      ? (getDraft(params.draft) ?? {
           day: isValidDay(params.day) ? params.day : todayString(),
           mealType: defaultMealType(),
           name: '',
@@ -40,12 +35,25 @@ export default function MealScreen() {
           aiConfidence: null,
           aiNotes: null,
           items: [emptyItem()],
-        },
-      );
-    } else {
-      getMeal(db, Number(params.id)).then((m) => (m ? setMeal(m) : setNotFound(true)));
-    }
-  }, [db, isNew, params.id, params.draft, params.day]);
+        })
+      : null,
+  );
+  const [notFound, setNotFound] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  // Istniejący posiłek: wczytanie z bazy.
+  useEffect(() => {
+    if (isNew) return;
+    let cancelled = false;
+    getMeal(db, Number(params.id)).then((m) => {
+      if (cancelled) return;
+      if (m) setMeal(m);
+      else setNotFound(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [db, isNew, params.id]);
 
   if (notFound) return <Text style={[styles.error, { padding: 16 }]}>Nie znaleziono posiłku (mógł zostać usunięty).</Text>;
   if (!meal) return <ActivityIndicator style={{ marginTop: 32 }} />;

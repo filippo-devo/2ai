@@ -1,0 +1,55 @@
+name: EAS Update – publikacja do Expo Go
+
+# Publikuje aktualną wersję aplikacji (JS + assety) na expo.dev przez EAS Update.
+# Po publikacji projekt pojawia się w Expo Go (zalogowanym na to samo konto Expo)
+# w zakładce Home → Projects, a na expo.dev → Updates jest kod QR do podglądu.
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'backend/**'
+      - '**/*.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: eas-update
+  cancel-in-progress: true
+
+env:
+  EAS_CLI: eas-cli@25.1.1
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+    steps:
+      - name: Sprawdź sekret EXPO_TOKEN
+        run: |
+          if [ -z "$EXPO_TOKEN" ]; then
+            echo "::error::Brak sekretu EXPO_TOKEN (Settings → Secrets and variables → Actions)."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Typecheck i test bazy przed publikacją
+        run: |
+          npx tsc --noEmit
+          npm run test:db
+
+      - name: Publikacja EAS Update (gałąź main)
+        run: |
+          MSG="$(git log -1 --pretty=%s)"
+          npx --yes "$EAS_CLI" update --branch main --message "$MSG" --environment preview --platform all --non-interactive

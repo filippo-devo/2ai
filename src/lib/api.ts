@@ -42,7 +42,7 @@ async function request(url: string, init: RequestInit, timeoutMs: number): Promi
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     return await fetch(url, { ...init, signal: controller.signal });
-  } catch (e) {
+  } catch {
     if (controller.signal.aborted) {
       throw new ApiError('TIMEOUT', 'Przekroczono czas oczekiwania na odpowiedź backendu.');
     }

@@ -39,6 +39,12 @@
         "projectId": "9eccb265-bc2e-4eb1-8ce4-28bf32c6aa2a"
       }
     },
-    "owner": "filiocha"
+    "owner": "filiocha",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/9eccb265-bc2e-4eb1-8ce4-28bf32c6aa2a"
+    }
   }
 }

@@ -27,6 +27,7 @@ export default function AnalyzeScreen() {
 
   useEffect(() => {
     let cancelled = false;
+    const runs = runId;
     prepareImage(params.uri, Number(params.width) || undefined, Number(params.height) || undefined)
       .then((img) => {
         if (cancelled) return;
@@ -36,7 +37,7 @@ export default function AnalyzeScreen() {
       .catch((e) => !cancelled && setStatus({ kind: 'error', code: 'IMAGE_PREP', message: `Nie udało się wczytać zdjęcia: ${String(e)}` }));
     return () => {
       cancelled = true;
-      runId.current++; // porzuć wynik trwającej analizy po wyjściu z ekranu
+      runs.current++; // porzuć wynik trwającej analizy po wyjściu z ekranu
     };
   }, [params.uri, params.width, params.height]);
 
