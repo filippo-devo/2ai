@@ -78,6 +78,12 @@ async function main() {
   await expectCode('REFUSED');
   mockFetch(() => ({ status: 401, body: { error: { type: 'authentication_error', message: 'invalid x-api-key' } } }));
   await expectCode('API_KEY_INVALID');
+  await assert.rejects(analyzeWithClaude('sk-ant-test-key-000000000000', 'AAAA'), (e: unknown) => {
+    assert.ok(e instanceof ApiError && e.message.includes('HTTP 401') && e.message.includes('invalid x-api-key'), 'komunikat zawiera powód z API');
+    return true;
+  });
+  mockFetch(() => ({ status: 400, body: { error: { type: 'invalid_request_error', message: 'Your credit balance is too low to access the Anthropic API.' } } }));
+  await expectCode('NO_CREDITS');
   mockFetch(() => ({ status: 429, body: { error: { message: 'rate' } } }));
   await expectCode('RATE_LIMITED');
   mockFetch(() => ({ status: 529, body: { error: { message: 'overloaded' } } }));

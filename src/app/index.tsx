@@ -15,6 +15,9 @@ import { session, useSession, type QuickEntry } from '../lib/session';
 
 const CONFIDENCE: Record<string, string> = { low: 'niska', medium: 'średnia', high: 'wysoka' };
 
+/** Usuwa spacje, znaki nowej linii i cudzysłowy, które łatwo wkleić razem z kluczem. */
+const cleanKey = (s: string) => s.replace(/[\s"'`„”]/g, '');
+
 /**
  * Szybka analiza: zdjęcie → kalorie. Nic nie jest zapisywane – zdjęcia, wyniki i klucz API
  * są tylko w pamięci i znikają po zamknięciu aplikacji.
@@ -108,9 +111,9 @@ export default function QuickScreen() {
             />
             <Button
               title="Użyj klucza"
-              disabled={keyInput.trim().length < 20}
+              disabled={cleanKey(keyInput).length < 20}
               onPress={() => {
-                session.setApiKey(keyInput.trim());
+                session.setApiKey(cleanKey(keyInput));
                 setKeyInput('');
               }}
             />
@@ -118,7 +121,9 @@ export default function QuickScreen() {
           </Card>
         ) : (
           <View style={[styles.row, { justifyContent: 'space-between' }]}>
-            <Text style={styles.muted}>Klucz API aktywny (tylko do zamknięcia aplikacji)</Text>
+            <Text style={[styles.muted, { flex: 1 }]}>
+              Klucz API aktywny: {apiKey.slice(0, 11)}…{apiKey.slice(-4)} (tylko do zamknięcia aplikacji)
+            </Text>
             <Pressable onPress={() => session.setApiKey(null)} hitSlop={8}>
               <Text style={{ color: colors.danger, fontWeight: '600' }}>Usuń klucz</Text>
             </Pressable>

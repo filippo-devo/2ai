@@ -128,8 +128,14 @@ export async function analyzeWithClaude(apiKey: string, imageBase64: string, hin
 
   if (!res.ok) {
     const detail = body.error?.message ?? '';
-    if (res.status === 401 || res.status === 403)
-      throw new ApiError('API_KEY_INVALID', 'Klucz API jest nieprawidłowy albo nie ma uprawnień. Sprawdź go i wpisz ponownie.');
+    // Pokazujemy oryginalny powód z API – bez niego nie da się odróżnić np. usuniętego klucza od braku uprawnień.
+    const why = `(HTTP ${res.status}${body.error?.type ? `, ${body.error.type}` : ''}${detail ? `: ${detail}` : ''})`;
+    if (res.status === 401)
+      throw new ApiError('API_KEY_INVALID', `Klucz API został odrzucony – jest błędny, usunięty albo wygasł. Utwórz nowy klucz i wklej go ponownie. ${why}`);
+    if (res.status === 403)
+      throw new ApiError('API_KEY_INVALID', `Klucz API nie ma uprawnień do tego zapytania. Sprawdź w konsoli organizację i uprawnienia klucza. ${why}`);
+    if (/credit balance/i.test(detail))
+      throw new ApiError('NO_CREDITS', `Brak środków na koncie API – sprawdź Settings → Billing w konsoli. ${why}`);
     if (res.status === 429) throw new ApiError('RATE_LIMITED', 'Przekroczono limit zapytań do API. Spróbuj za chwilę.');
     if (res.status === 400) throw new ApiError('BAD_REQUEST', `API odrzuciło zapytanie: ${detail}`);
     throw new ApiError('UPSTREAM_ERROR', `Błąd API (${res.status}). Spróbuj ponownie.`);
