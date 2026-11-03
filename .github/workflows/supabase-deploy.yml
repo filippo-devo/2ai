@@ -1,0 +1,62 @@
+name: Supabase – wdrożenie serwera analizy
+
+# Wdraża funkcję supabase/functions/calai i ustawia jej sekret ANTHROPIC_API_KEY.
+# Potrzebne sekrety repozytorium: SUPABASE_ACCESS_TOKEN, SUPABASE_PROJECT_REF, ANTHROPIC_API_KEY.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/**'
+      - '.github/workflows/supabase-deploy.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supabase-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    steps:
+      - name: Sprawdź sekrety
+        run: |
+          missing=0
+          for v in SUPABASE_ACCESS_TOKEN SUPABASE_PROJECT_REF ANTHROPIC_API_KEY; do
+            if [ -z "${!v}" ]; then echo "::error::Brak sekretu $v (Settings → Secrets and variables → Actions)."; missing=1; fi
+          done
+          exit $missing
+
+      - uses: actions/checkout@v6
+
+      - uses: supabase/setup-cli@v3
+        with:
+          version: 2.121.0
+
+      - name: Ustaw klucz Anthropic jako sekret funkcji
+        run: |
+          printf 'ANTHROPIC_API_KEY=%s\n' "$ANTHROPIC_API_KEY" > "$RUNNER_TEMP/fn.env"
+          supabase secrets set --env-file "$RUNNER_TEMP/fn.env" --project-ref "$SUPABASE_PROJECT_REF"
+          rm -f "$RUNNER_TEMP/fn.env"
+
+      - name: Wdróż funkcję calai
+        run: supabase functions deploy calai --project-ref "$SUPABASE_PROJECT_REF" --no-verify-jwt --use-api
+
+      - name: Test działania (health)
+        run: |
+          URL="https://${SUPABASE_PROJECT_REF}.supabase.co/functions/v1/calai/health"
+          for i in 1 2 3 4 5 6; do
+            RES=$(curl -s -m 20 "$URL" || true)
+            echo "$RES"
+            if echo "$RES" | grep -q '"apiKeyConfigured":true'; then exit 0; fi
+            sleep 10
+          done
+          echo "::error::Funkcja nie odpowiada poprawnie pod $URL"
+          exit 1
