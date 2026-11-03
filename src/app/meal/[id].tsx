@@ -5,7 +5,7 @@ import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Platform, Pressa
 import { ItemEditor } from '../../components/ItemEditor';
 import { MacroLine } from '../../components/MacroSummary';
 import { MealTypePicker } from '../../components/MealTypePicker';
-import { Badge, Button, Card, colors, styles } from '../../components/ui';
+import { Button, Card, Icon, styles } from '../../components/ui';
 import { deleteMeal, getMeal, saveMeal } from '../../db/repo';
 import { addDays, defaultMealType, formatDay, isValidDay, todayString } from '../../lib/dates';
 import { dropDraft, getDraft, newKey } from '../../lib/draft';
@@ -13,7 +13,6 @@ import { mealTotals } from '../../lib/nutrition';
 import { deletePhoto, persistPhoto, photoUri } from '../../lib/photos';
 import type { ItemDraft, MealDraft } from '../../lib/types';
 
-const CONFIDENCE: Record<string, string> = { low: 'niska', medium: 'średnia', high: 'wysoka' };
 
 function emptyItem(): ItemDraft {
   return { key: newKey(), name: '', grams: 100, per100: { kcal: 0, protein: 0, carbs: 0, fat: 0 }, aiEstimated: false };
@@ -112,17 +111,7 @@ export default function MealScreen() {
       <ScrollView style={styles.screen} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         {previewUri && <Image source={{ uri: previewUri }} style={{ width: '100%', height: 200, borderRadius: 12 }} resizeMode="cover" />}
 
-        {meal.source === 'ai' && (
-          <Card style={{ borderColor: colors.warn }}>
-            <Badge text="WYNIK SZACUNKOWY (AI)" />
-            <Text style={styles.text}>
-              Gramatura i wartości odżywcze są oszacowane przez AI na podstawie zdjęcia i mogą się różnić od rzeczywistych. Popraw je,
-              jeśli znasz dokładne dane.
-            </Text>
-            {meal.aiConfidence && <Text style={styles.muted}>Pewność modelu: {CONFIDENCE[meal.aiConfidence] ?? meal.aiConfidence}</Text>}
-            {meal.aiNotes && <Text style={styles.muted}>Uwagi: {meal.aiNotes}</Text>}
-          </Card>
-        )}
+        {meal.aiNotes && <Text style={styles.muted}>{meal.aiNotes}</Text>}
 
         <Card>
           <Text style={styles.label}>Nazwa posiłku</Text>
@@ -132,17 +121,17 @@ export default function MealScreen() {
           <Text style={styles.label}>Dzień</Text>
           <View style={[styles.row, { justifyContent: 'space-between' }]}>
             <Pressable onPress={() => update({ day: addDays(meal.day, -1) })} hitSlop={10}>
-              <Text style={{ fontSize: 22, paddingHorizontal: 8 }}>‹</Text>
+              <Icon name="chevron-back" size={22} />
             </Pressable>
             <Text style={[styles.text, { flex: 1, textAlign: 'center' }]}>{formatDay(meal.day)}</Text>
             <Pressable onPress={() => update({ day: addDays(meal.day, 1) })} hitSlop={10}>
-              <Text style={{ fontSize: 22, paddingHorizontal: 8 }}>›</Text>
+              <Icon name="chevron-forward" size={22} />
             </Pressable>
           </View>
         </Card>
 
         <Card>
-          <Text style={styles.h2}>Razem{meal.source === 'ai' ? ' (szacunkowo)' : ''}</Text>
+          <Text style={styles.h2}>Razem</Text>
           <MacroLine m={totals} />
         </Card>
 

@@ -1,156 +1,186 @@
+import { CameraView, useCameraPermissions } from 'expo-camera';
+import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
-import { router, Stack } from 'expo-router';
+import { router } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
-import { useState } from 'react';
-import { Alert, Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
-import { Badge, Button, Card, colors, styles } from '../components/ui';
-import { analyzePhoto, ApiError } from '../lib/api';
-import { getEffectiveBackendUrl } from '../lib/backend';
-import { newKey } from '../lib/draft';
-import { prepareImage } from '../lib/image';
-import { fmtG, fmtKcal } from '../lib/nutrition';
-import { deleteTempFile } from '../lib/photos';
-import { session, useSession, type QuickEntry } from '../lib/session';
+import { useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Alert, Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Icon, colors, fonts, type IconName } from '../components/ui';
+import { startPhotoScan } from '../lib/scan';
+import { useSession } from '../lib/session';
 
-const CONFIDENCE: Record<string, string> = { low: 'niska', medium: 'średnia', high: 'wysoka' };
-
-/**
- * Szybka analiza: zdjęcie → kalorie. Analizę robi serwer w chmurze (klucz API jest tylko tam).
- * Nic nie jest zapisywane – zdjęcia i wyniki są tylko w pamięci i znikają po zamknięciu aplikacji.
- */
-export default function QuickScreen() {
+/** Ekran startowy: od razu aparat. Jedno stuknięcie = zdjęcie i analiza. */
+export default function CameraScreen() {
   const db = useSQLiteContext();
+  const insets = useSafeAreaInsets();
+  const camera = useRef<CameraView>(null);
+  const [permission, requestPermission] = useCameraPermissions();
+  const [ready, setReady] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [torch, setTorch] = useState(false);
   const { entries } = useSession();
-  const [hint, setHint] = useState('');
 
-  async function pick(fromCamera: boolean) {
+  // Prosimy o dostęp do aparatu od razu przy pierwszym uruchomieniu.
+  useEffect(() => {
+    if (permission && !permission.granted && permission.canAskAgain) void requestPermission();
+  }, [permission, requestPermission]);
+
+  async function capture() {
+    if (!camera.current || busy) return;
+    setBusy(true);
     try {
-      let result: ImagePicker.ImagePickerResult;
-      if (fromCamera) {
-        const perm = await ImagePicker.requestCameraPermissionsAsync();
-        if (!perm.granted) {
-          Alert.alert('Brak dostępu do aparatu', 'Zezwól Expo Go na dostęp do aparatu w ustawieniach telefonu albo wybierz zdjęcie z galerii.');
-          return;
-        }
-        result = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 1 });
-      } else {
-        result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
-      }
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      const photo = await camera.current.takePictureAsync({ quality: 0.8, shutterSound: false });
+      const id = startPhotoScan(db, photo.uri, photo.width, photo.height);
+      router.push({ pathname: '/scan/[id]', params: { id } });
+    } catch (e) {
+      Alert.alert('Nie udało się zrobić zdjęcia', String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function pickFromGallery() {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
       if (result.canceled || !result.assets?.[0]) return;
-      await analyze(result.assets[0]);
+      const a = result.assets[0];
+      const id = startPhotoScan(db, a.uri, a.width, a.height);
+      router.push({ pathname: '/scan/[id]', params: { id } });
     } catch (e) {
-      Alert.alert('Nie udało się pobrać zdjęcia', String(e));
+      Alert.alert('Nie udało się wczytać zdjęcia', String(e));
     }
   }
 
-  async function analyze(asset: ImagePicker.ImagePickerAsset) {
-    const id = newKey();
-    const at = Date.now();
-    let image = asset.uri;
-    session.add({ id, at, image, status: 'analyzing' });
-    try {
-      const prepared = await prepareImage(asset.uri, asset.width, asset.height);
-      // Zdjęcie trzymamy tylko w pamięci (data URI), a pliki tymczasowe od razu usuwamy.
-      image = `data:image/jpeg;base64,${prepared.base64}`;
-      deleteTempFile(prepared.uri);
-      deleteTempFile(asset.uri);
-      session.update({ id, at, image, status: 'analyzing' });
-
-      const text = hint;
-      setHint('');
-      const result = await analyzePhoto(await getEffectiveBackendUrl(db), prepared.base64, text);
-      session.update({ id, at, image, status: 'done', result });
-    } catch (e) {
-      const err = e instanceof ApiError ? e : new ApiError('UNKNOWN', String(e));
-      session.update({ id, at, image, status: 'error', code: err.code, message: err.message });
-    }
-  }
+  const granted = !!permission?.granted;
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <Stack.Screen
-        options={{
-          title: 'Ile to ma kalorii?',
-          headerRight: () => (
-            <Pressable onPress={() => router.push('/diary')} hitSlop={8}>
-              <Text style={{ fontSize: 15, fontWeight: '600' }}>Dziennik</Text>
-            </Pressable>
-          ),
-        }}
-      />
-      <ScrollView style={styles.screen} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <Button title="📷 Zrób zdjęcie" onPress={() => pick(true)} style={{ paddingVertical: 18 }} disabled={Platform.OS === 'web'} />
-        <Button title="🖼️ Wybierz z galerii" variant="secondary" onPress={() => pick(false)} />
-        <TextInput
-          style={styles.input}
-          value={hint}
-          onChangeText={setHint}
-          placeholder="Opcjonalnie: opis, np. „owsianka na mleku 2%”"
-          placeholderTextColor={colors.muted}
-          maxLength={300}
+    <View style={s.root}>
+      {granted ? (
+        <CameraView
+          ref={camera}
+          style={StyleSheet.absoluteFill}
+          facing="back"
+          enableTorch={torch}
+          animateShutter
+          onCameraReady={() => setReady(true)}
         />
+      ) : (
+        <PermissionView
+          loading={!permission}
+          canAsk={permission?.canAskAgain ?? true}
+          onAsk={() => void requestPermission()}
+        />
+      )}
 
-        {entries.map((e) => (
-          <EntryCard key={e.id} entry={e} />
-        ))}
-
-        {entries.length > 0 && <Button title="Wyczyść wyniki" variant="secondary" onPress={() => session.clear()} />}
-
-        <Text style={[styles.muted, { textAlign: 'center' }]}>
-          Nic nie jest zapisywane: zdjęcia i wyniki są tylko w pamięci i znikają po zamknięciu aplikacji. Zdjęcie jest wysyłane przez
-          serwer aplikacji do Anthropic wyłącznie w celu analizy. Wartości są szacunkowe.
-        </Text>
-      </ScrollView>
-    </KeyboardAvoidingView>
-  );
-}
-
-function EntryCard({ entry }: { entry: QuickEntry }) {
-  return (
-    <Card style={entry.status === 'error' ? { borderColor: colors.danger } : undefined}>
-      <View style={[styles.row, { alignItems: 'flex-start' }]}>
-        <Image source={{ uri: entry.image }} style={{ width: 84, height: 84, borderRadius: 10, backgroundColor: '#EEE' }} />
-        <View style={{ flex: 1, gap: 4 }}>
-          {entry.status === 'analyzing' && <Text style={styles.text}>Analizuję… (zwykle 10–40 s)</Text>}
-          {entry.status === 'error' && (
-            <>
-              <Text style={[styles.h2, { color: colors.danger }]}>Nie udało się</Text>
-              <Text style={styles.text}>{entry.message}</Text>
-            </>
+      {/* Górny pasek */}
+      <View style={[s.topBar, { paddingTop: insets.top + 8 }]}>
+        <Text style={s.wordmark}>kęs.</Text>
+        <View style={{ flexDirection: 'row', gap: 10 }}>
+          {granted && (
+            <RoundButton icon={torch ? 'flash' : 'flash-off'} label="Latarka" onPress={() => setTorch((t) => !t)} />
           )}
-          {entry.status === 'done' && (
-            <>
-              <Text style={styles.h2} numberOfLines={2}>
-                {entry.result.mealName}
-              </Text>
-              <Text style={{ fontSize: 30, fontWeight: '800', color: colors.text }}>≈ {fmtKcal(entry.result.totals.kcal)} kcal</Text>
-              <Text style={styles.muted}>
-                B {fmtG(entry.result.totals.protein)} g · W {fmtG(entry.result.totals.carbs)} g · T {fmtG(entry.result.totals.fat)} g
-              </Text>
-            </>
-          )}
+          <RoundButton icon="time-outline" label="Ostatnie" badge={entries.length} onPress={() => router.push('/recent')} />
         </View>
-        <Pressable onPress={() => session.remove(entry.id)} hitSlop={10} accessibilityLabel="Usuń wynik">
-          <Text style={{ color: colors.muted, fontSize: 18 }}>✕</Text>
-        </Pressable>
       </View>
-      {entry.status === 'done' && (
-        <View style={{ gap: 4, marginTop: 4 }}>
-          {entry.result.items.map((it, i) => (
-            <View key={i} style={[styles.row, { justifyContent: 'space-between' }]}>
-              <Text style={[styles.text, { flex: 1 }]} numberOfLines={1}>
-                {it.name} · {it.grams} g
-              </Text>
-              <Text style={[styles.text, { fontWeight: '600' }]}>{fmtKcal(it.totals.kcal)} kcal</Text>
-            </View>
-          ))}
-          <View style={[styles.row, { marginTop: 4 }]}>
-            <Badge text="SZACUNEK AI" />
-            <Text style={styles.muted}>pewność: {CONFIDENCE[entry.result.confidence] ?? entry.result.confidence}</Text>
-          </View>
-          {!!entry.result.notes && <Text style={styles.muted}>{entry.result.notes}</Text>}
+
+      {/* Ramka celownika */}
+      {granted && (
+        <View pointerEvents="none" style={s.frame}>
+          <View style={[s.corner, { top: 0, left: 0, borderTopWidth: 3, borderLeftWidth: 3, borderTopLeftRadius: 28 }]} />
+          <View style={[s.corner, { top: 0, right: 0, borderTopWidth: 3, borderRightWidth: 3, borderTopRightRadius: 28 }]} />
+          <View style={[s.corner, { bottom: 0, left: 0, borderBottomWidth: 3, borderLeftWidth: 3, borderBottomLeftRadius: 28 }]} />
+          <View style={[s.corner, { bottom: 0, right: 0, borderBottomWidth: 3, borderRightWidth: 3, borderBottomRightRadius: 28 }]} />
         </View>
       )}
-    </Card>
+
+      {/* Dolne sterowanie */}
+      <View style={[s.bottom, { paddingBottom: insets.bottom + 24 }]}>
+        <Text style={s.hint}>{granted ? 'Ustaw talerz w ramce i zrób zdjęcie' : 'Możesz też wybrać zdjęcie albo opisać posiłek'}</Text>
+        <View style={s.controls}>
+          <SideButton icon="images-outline" label="Galeria" onPress={pickFromGallery} />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Zrób zdjęcie"
+            onPress={capture}
+            disabled={!granted || !ready || busy || Platform.OS === 'web'}
+            style={({ pressed }) => [s.shutter, (!granted || !ready) && { opacity: 0.4 }, pressed && { transform: [{ scale: 0.94 }] }]}
+          >
+            <View style={s.shutterInner}>{busy && <ActivityIndicator color={colors.text} />}</View>
+          </Pressable>
+          <SideButton icon="mic-outline" label="Powiedz" onPress={() => router.push('/describe')} />
+        </View>
+      </View>
+    </View>
   );
 }
+
+function RoundButton({ icon, label, onPress, badge }: { icon: IconName; label: string; onPress: () => void; badge?: number }) {
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} hitSlop={8} style={s.round}>
+      <Icon name={icon} size={20} color="#fff" />
+      {!!badge && (
+        <View style={s.badge}>
+          <Text style={s.badgeText}>{badge}</Text>
+        </View>
+      )}
+    </Pressable>
+  );
+}
+
+function SideButton({ icon, label, onPress }: { icon: IconName; label: string; onPress: () => void }) {
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} style={s.side} hitSlop={8}>
+      <View style={s.sideCircle}>
+        <Icon name={icon} size={24} color="#fff" />
+      </View>
+      <Text style={s.sideLabel}>{label}</Text>
+    </Pressable>
+  );
+}
+
+function PermissionView({ loading, canAsk, onAsk }: { loading: boolean; canAsk: boolean; onAsk: () => void }) {
+  if (loading) return <View style={StyleSheet.absoluteFill} />;
+  return (
+    <View style={s.permission}>
+      <View style={s.permIcon}>
+        <Icon name="camera-outline" size={34} color="#fff" />
+      </View>
+      <Text style={s.permTitle}>Potrzebny jest aparat</Text>
+      <Text style={s.permText}>Zrób zdjęcie posiłku, a od razu zobaczysz, ile ma kalorii.</Text>
+      <Pressable
+        accessibilityRole="button"
+        onPress={canAsk ? onAsk : () => void Linking.openSettings()}
+        style={({ pressed }) => [s.permButton, pressed && { opacity: 0.7 }]}
+      >
+        <Text style={s.permButtonText}>{canAsk ? 'Zezwól na aparat' : 'Otwórz ustawienia'}</Text>
+      </Pressable>
+    </View>
+  );
+}
+
+const s = StyleSheet.create({
+  root: { flex: 1, backgroundColor: '#000' },
+  topBar: { position: 'absolute', top: 0, left: 0, right: 0, paddingHorizontal: 20, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  wordmark: { fontFamily: fonts.displayItalic, fontSize: 34, color: '#fff', letterSpacing: -0.5 },
+  round: { width: 42, height: 42, borderRadius: 21, backgroundColor: 'rgba(0,0,0,0.38)', alignItems: 'center', justifyContent: 'center' },
+  badge: { position: 'absolute', top: -2, right: -2, minWidth: 18, height: 18, borderRadius: 9, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 },
+  badgeText: { color: '#fff', fontFamily: fonts.bold, fontSize: 11 },
+  frame: { position: 'absolute', top: '22%', left: '12%', right: '12%', aspectRatio: 1 },
+  corner: { position: 'absolute', width: 44, height: 44, borderColor: 'rgba(255,255,255,0.9)' },
+  bottom: { position: 'absolute', left: 0, right: 0, bottom: 0, alignItems: 'center', gap: 18 },
+  hint: { color: 'rgba(255,255,255,0.85)', fontFamily: fonts.medium, fontSize: 14 },
+  controls: { width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-evenly' },
+  shutter: { width: 84, height: 84, borderRadius: 42, borderWidth: 4, borderColor: '#fff', alignItems: 'center', justifyContent: 'center' },
+  shutterInner: { width: 68, height: 68, borderRadius: 34, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' },
+  side: { alignItems: 'center', gap: 6, width: 76 },
+  sideCircle: { width: 52, height: 52, borderRadius: 26, backgroundColor: 'rgba(255,255,255,0.16)', alignItems: 'center', justifyContent: 'center' },
+  sideLabel: { color: '#fff', fontFamily: fonts.semibold, fontSize: 12 },
+  permission: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 36, gap: 12 },
+  permIcon: { width: 76, height: 76, borderRadius: 38, backgroundColor: 'rgba(255,255,255,0.12)', alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
+  permTitle: { color: '#fff', fontFamily: fonts.display, fontSize: 34, textAlign: 'center' },
+  permText: { color: 'rgba(255,255,255,0.7)', fontFamily: fonts.medium, fontSize: 15, textAlign: 'center', lineHeight: 22 },
+  permButton: { marginTop: 12, backgroundColor: '#fff', borderRadius: 999, paddingVertical: 14, paddingHorizontal: 26 },
+  permButtonText: { color: colors.text, fontFamily: fonts.bold, fontSize: 15 },
+});

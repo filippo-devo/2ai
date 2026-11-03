@@ -1,7 +1,7 @@
 import { Text, View } from 'react-native';
 import { fmtG, fmtKcal } from '../lib/nutrition';
 import type { Goals, Macros } from '../lib/types';
-import { Card, ProgressBar, colors, styles } from './ui';
+import { Card, ProgressBar, colors, fonts, styles } from './ui';
 
 export function MacroSummary({ totals, goals }: { totals: Macros; goals: Goals }) {
   const left = goals.kcal - totals.kcal;
@@ -10,9 +10,9 @@ export function MacroSummary({ totals, goals }: { totals: Macros; goals: Goals }
       <View style={[styles.row, { justifyContent: 'space-between', alignItems: 'flex-end' }]}>
         <View>
           <Text style={styles.muted}>Kalorie</Text>
-          <Text style={{ fontSize: 32, fontWeight: '800', color: colors.text }}>
+          <Text style={{ fontSize: 46, fontFamily: fonts.display, color: colors.text }}>
             {fmtKcal(totals.kcal)}
-            <Text style={{ fontSize: 16, fontWeight: '500', color: colors.muted }}> / {fmtKcal(goals.kcal)} kcal</Text>
+            <Text style={{ fontSize: 15, fontFamily: fonts.medium, color: colors.muted }}> / {fmtKcal(goals.kcal)} kcal</Text>
           </Text>
         </View>
         <Text style={[styles.muted, left < 0 && { color: colors.danger }]}>
@@ -33,7 +33,7 @@ function MacroCol({ label, value, goal, color }: { label: string; value: number;
   return (
     <View style={{ flex: 1, gap: 4 }}>
       <Text style={styles.muted} numberOfLines={1} adjustsFontSizeToFit>{label}</Text>
-      <Text style={[styles.text, { fontWeight: '700' }]}>
+      <Text style={[styles.text, { fontFamily: fonts.bold }]}>
         {fmtG(value)}
         <Text style={styles.muted}> / {fmtG(goal)} g</Text>
       </Text>

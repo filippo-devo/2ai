@@ -9,7 +9,7 @@ import { sumMacros } from '../lib/nutrition';
 import { photoUri } from '../lib/photos';
 import { MEAL_TYPES, type Goals, type MealSummary } from '../lib/types';
 import { MacroLine, MacroSummary } from './MacroSummary';
-import { Badge, Button, Card, colors, styles } from './ui';
+import { Button, Card, Icon, colors, styles } from './ui';
 
 export function DayView({ initialDay, showNav }: { initialDay: string; showNav?: boolean }) {
   const db = useSQLiteContext();
@@ -67,7 +67,7 @@ export function DayView({ initialDay, showNav }: { initialDay: string; showNav?:
       <View style={[styles.row, { justifyContent: 'space-between' }]}>
         {showNav ? (
           <Pressable onPress={() => setDay(addDays(day, -1))} hitSlop={12} accessibilityLabel="Poprzedni dzień">
-            <Text style={{ fontSize: 24, paddingHorizontal: 8 }}>‹</Text>
+            <Icon name="chevron-back" size={24} />
           </Pressable>
         ) : (
           <View />
@@ -77,7 +77,7 @@ export function DayView({ initialDay, showNav }: { initialDay: string; showNav?:
         </Pressable>
         {showNav ? (
           <Pressable onPress={() => setDay(addDays(day, 1))} hitSlop={12} accessibilityLabel="Następny dzień">
-            <Text style={{ fontSize: 24, paddingHorizontal: 8 }}>›</Text>
+            <Icon name="chevron-forward" size={24} />
           </Pressable>
         ) : (
           <View />
@@ -89,11 +89,12 @@ export function DayView({ initialDay, showNav }: { initialDay: string; showNav?:
       <MacroSummary totals={totals} goals={goals} />
 
       <View style={styles.row}>
-        <Button title="📷 Aparat" onPress={() => pickPhoto(true)} style={{ flex: 1 }} disabled={Platform.OS === 'web'} />
-        <Button title="🖼️ Galeria" onPress={() => pickPhoto(false)} style={{ flex: 1 }} />
+        <Button title="Aparat" icon="camera-outline" onPress={() => pickPhoto(true)} style={{ flex: 1 }} disabled={Platform.OS === 'web'} />
+        <Button title="Galeria" icon="images-outline" variant="secondary" onPress={() => pickPhoto(false)} style={{ flex: 1 }} />
       </View>
       <Button
-        title="✏️ Dodaj ręcznie (bez zdjęcia)"
+        title="Dodaj ręcznie"
+        icon="create-outline"
         variant="secondary"
         onPress={() => router.push({ pathname: '/meal/[id]', params: { id: 'new', day } })}
       />
@@ -121,18 +122,17 @@ function MealRow({ meal }: { meal: MealSummary }) {
     <Pressable onPress={() => router.push({ pathname: '/meal/[id]', params: { id: String(meal.id) } })}>
       <Card style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
         {uri ? (
-          <Image source={{ uri }} style={{ width: 56, height: 56, borderRadius: 8 }} />
+          <Image source={{ uri }} style={{ width: 56, height: 56, borderRadius: 14 }} />
         ) : (
-          <View style={{ width: 56, height: 56, borderRadius: 8, backgroundColor: '#EEE', alignItems: 'center', justifyContent: 'center' }}>
-            <Text style={{ fontSize: 22 }}>🍽️</Text>
+          <View style={{ width: 56, height: 56, borderRadius: 14, backgroundColor: colors.chip, alignItems: 'center', justifyContent: 'center' }}>
+            <Icon name="restaurant-outline" size={22} color={colors.muted} />
           </View>
         )}
         <View style={{ flex: 1, gap: 2 }}>
           <View style={[styles.row, { justifyContent: 'space-between' }]}>
-            <Text style={[styles.text, { fontWeight: '700', flex: 1 }]} numberOfLines={1}>
+            <Text style={[styles.h2, { flex: 1 }]} numberOfLines={1}>
               {meal.name}
             </Text>
-            {meal.source === 'ai' && <Badge text="szacunek AI" />}
           </View>
           <MacroLine m={meal.totals} />
           <Text style={[styles.muted, { color: colors.muted }]}>Składniki: {meal.itemCount}</Text>

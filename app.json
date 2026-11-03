@@ -31,6 +31,15 @@
           "cameraPermission": "Aplikacja potrzebuje aparatu, aby fotografować posiłki.",
           "microphonePermission": false
         }
+      ],
+      "expo-font",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Aparat jest potrzebny, żeby zrobić zdjęcie posiłku i policzyć kalorie.",
+          "microphonePermission": false,
+          "recordAudioAndroid": false
+        }
       ]
     ],
     "scheme": "calai",

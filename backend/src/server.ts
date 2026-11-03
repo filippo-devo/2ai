@@ -1,7 +1,7 @@
 import "dotenv/config";
 import express, { type NextFunction, type Request, type Response } from "express";
 import os from "node:os";
-import { AnalysisError, analyzeMealPhoto, getModel, isApiKeyConfigured } from "./analyze.js";
+import { AnalysisError, analyzeMeal, getModel, isApiKeyConfigured, type MealImage } from "./analyze.js";
 
 const PORT = Number(process.env.PORT) || 3001;
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
@@ -41,20 +41,25 @@ app.get("/health", (_req, res) => {
 
 app.post("/analyze", async (req: Request, res: Response) => {
   const started = Date.now();
-  const body = req.body as { imageBase64?: unknown; hint?: unknown } | undefined;
+  const body = req.body as { imageBase64?: unknown; hint?: unknown; text?: unknown } | undefined;
   const raw = typeof body?.imageBase64 === "string" ? body.imageBase64.replace(/^data:[^;]+;base64,/, "") : "";
   const hint = typeof body?.hint === "string" ? body.hint : undefined;
-
-  if (!raw) return sendError(res, 400, "BAD_REQUEST", "Brak zdjęcia w zapytaniu.");
+  const text = typeof body?.text === "string" ? body.text.trim() : "";
 
   // Zdjęcie istnieje wyłącznie w pamięci na czas tego zapytania – nic nie jest zapisywane na dysku.
-  const buf = Buffer.from(raw, "base64");
-  if (buf.length > MAX_IMAGE_BYTES) return sendError(res, 413, "IMAGE_TOO_LARGE", "Zdjęcie jest za duże.");
-  const mediaType = detectMediaType(buf);
-  if (!mediaType) return sendError(res, 400, "BAD_IMAGE", "Nieobsługiwany lub uszkodzony plik zdjęcia (wymagany JPEG, PNG lub WebP).");
+  let image: MealImage | null = null;
+  if (raw) {
+    const buf = Buffer.from(raw, "base64");
+    if (buf.length > MAX_IMAGE_BYTES) return sendError(res, 413, "IMAGE_TOO_LARGE", "Zdjęcie jest za duże.");
+    const mediaType = detectMediaType(buf);
+    if (!mediaType) return sendError(res, 400, "BAD_IMAGE", "Nieobsługiwany lub uszkodzony plik zdjęcia (wymagany JPEG, PNG lub WebP).");
+    image = { base64: buf.toString("base64"), mediaType };
+  } else if (text.length < 2) {
+    return sendError(res, 400, "BAD_REQUEST", "Wyślij zdjęcie albo opis posiłku.");
+  }
 
   try {
-    const result = await analyzeMealPhoto(buf.toString("base64"), mediaType, hint);
+    const result = await analyzeMeal(image, image ? hint : text);
     console.log(`[analyze] OK ${result.items.length} składników, ${result.totals.kcal} kcal, ${Date.now() - started} ms`);
     res.json(result);
   } catch (err) {

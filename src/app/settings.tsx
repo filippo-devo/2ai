@@ -47,7 +47,7 @@ export default function SettingsScreen() {
       const h = await checkHealth(normalized || CLOUD_API_URL);
       setTestResult(
         h.apiKeyConfigured
-          ? { ok: true, text: `Połączono ✓ (model: ${h.model})` }
+          ? { ok: true, text: `Połączono (model: ${h.model})` }
           : { ok: false, text: 'Połączono z backendem, ale brak klucza API w backend/.env – analiza nie zadziała.' },
       );
     } catch (e) {

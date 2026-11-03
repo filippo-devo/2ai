@@ -36,7 +36,7 @@ export default function HistoryScreen() {
         <Pressable onPress={() => router.push({ pathname: '/day/[date]', params: { date: item.day } })}>
           <Card>
             <View style={[styles.row, { justifyContent: 'space-between' }]}>
-              <Text style={[styles.text, { fontWeight: '700', flex: 1 }]}>{formatDay(item.day)}</Text>
+              <Text style={[styles.h2, { flex: 1 }]}>{formatDay(item.day)}</Text>
               <Text style={styles.muted}>posiłki: {item.mealCount}</Text>
             </View>
             <Text style={styles.text}>

@@ -107,7 +107,7 @@ export default function AnalyzeScreen() {
           <TextInput style={styles.input} value={hint} onChangeText={setHint} placeholder="Opis posiłku" editable={!busy} maxLength={300} />
           <Text style={styles.muted}>
             Po naciśnięciu „Analizuj” zdjęcie zostanie wysłane do serwera aplikacji i dalej do Anthropic. Serwer niczego nie
-            zapisuje. Wynik to szacunek – sprawdź go przed zapisaniem.
+            zapisuje. Sprawdź wynik przed zapisaniem.
           </Text>
         </Card>
 

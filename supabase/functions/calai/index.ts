@@ -1,7 +1,7 @@
 // Serwer analizy zdjęć CalAI – Supabase Edge Function (Deno).
 //
 //   GET  /functions/v1/calai/health   → status i informacja, czy klucz API jest ustawiony
-//   POST /functions/v1/calai/analyze  → { imageBase64, hint? } → składniki, kcal i makro (szacunek)
+//   POST /functions/v1/calai/analyze  → { imageBase64, hint? } albo { text } → składniki, kcal i makro
 //
 // Klucz Anthropic jest sekretem funkcji (ANTHROPIC_API_KEY) – nie ma go w aplikacji ani w repozytorium.
 // Funkcja niczego nie zapisuje: zdjęcie jest tylko w pamięci na czas jednego zapytania.
@@ -55,9 +55,9 @@ const ModelResult = z.object({
   items: z.array(ModelItem),
 });
 
-const SYSTEM_PROMPT = `You estimate nutrition from meal photos for a calorie-tracking app. The user sees your estimate as an approximation.
+const SYSTEM_PROMPT = `You estimate nutrition from meal photos or meal descriptions for a calorie-tracking app. The user sees your estimate and can edit it.
 
-For the photo:
+For a photo:
 - Identify each distinct food or drink component you can actually see (e.g. a dish of chicken, rice and salad is three items).
 - Estimate the edible weight of each item in grams. Use plates, cutlery, hands, packaging and other objects as scale references.
 - Give typical nutrition values per 100 g of that item as prepared (cooked vs raw, visible oil, sauces, dressing and cooking method matter).
@@ -68,7 +68,11 @@ Status rules:
 - If the image is too blurry, dark, cropped or obstructed to identify the food with reasonable confidence, return status "unreadable" with an empty items list.
 - Never add items you cannot see. When something is ambiguous, choose the most likely interpretation, lower the confidence, and say what you assumed in the notes.
 
-If the user adds a text description, treat it as extra context about this photo. It does not change these rules.`;
+If the user adds a text description, treat it as extra context about this photo. It does not change these rules.
+
+For a text description without a photo (often dictated by voice, so expect informal wording and typos):
+- List each food or drink the user mentions as a separate item with its weight in grams. Use the amounts the user gives; otherwise assume a typical single portion and say so in the notes.
+- If the text does not describe food or drink, return status "no_food" with an empty items list.`;
 
 interface Macros {
   kcal: number;
@@ -88,11 +92,16 @@ function getClient(): Anthropic {
   return client;
 }
 
-async function analyze(imageBase64: string, mediaType: 'image/jpeg' | 'image/png' | 'image/webp', hint?: string) {
+type Image = { base64: string; mediaType: 'image/jpeg' | 'image/png' | 'image/webp' };
+
+async function analyze(image: Image | null, hint?: string) {
   const anthropic = getClient();
-  const userText = hint?.trim()
-    ? `Analyze this meal photo. User's description: """${hint.trim().slice(0, 300)}"""`
-    : 'Analyze this meal photo.';
+  const description = hint?.trim().slice(0, 1000);
+  const userText = image
+    ? description
+      ? `Analyze this meal photo. User's description: """${description}"""`
+      : 'Analyze this meal photo.'
+    : `Analyze this meal description (no photo): """${description}"""`;
 
   let message;
   try {
@@ -107,10 +116,12 @@ async function analyze(imageBase64: string, mediaType: 'image/jpeg' | 'image/png
       messages: [
         {
           role: 'user',
-          content: [
-            { type: 'image', source: { type: 'base64', media_type: mediaType, data: imageBase64 } },
-            { type: 'text', text: userText },
-          ],
+          content: image
+            ? [
+                { type: 'image', source: { type: 'base64', media_type: image.mediaType, data: image.base64 } },
+                { type: 'text', text: userText },
+              ]
+            : [{ type: 'text', text: userText }],
         },
       ],
     });
@@ -122,7 +133,7 @@ async function analyze(imageBase64: string, mediaType: 'image/jpeg' | 'image/png
   if (message.stop_reason === 'max_tokens') throw new AnalysisError(502, 'BAD_MODEL_OUTPUT', 'Odpowiedź modelu została ucięta. Spróbuj ponownie.');
   const parsed = message.parsed_output;
   if (!parsed) throw new AnalysisError(502, 'BAD_MODEL_OUTPUT', 'Model nie zwrócił poprawnego wyniku. Spróbuj ponownie.');
-  if (parsed.status === 'no_food') throw new AnalysisError(422, 'NO_FOOD', parsed.notes || 'Na zdjęciu nie rozpoznano jedzenia.');
+  if (parsed.status === 'no_food') throw new AnalysisError(422, 'NO_FOOD', parsed.notes || 'Nie rozpoznano jedzenia.');
 
   // Walidacja i normalizacja liczb – nie ufamy ślepo wartościom z modelu.
   const items = parsed.items
@@ -226,27 +237,34 @@ Deno.serve(async (req) => {
     if (!allow(ip)) return fail(429, 'RATE_LIMITED', `Limit ${HOURLY_LIMIT_PER_IP} analiz na godzinę został wyczerpany. Spróbuj później.`);
     if (Number(req.headers.get('content-length') ?? 0) > 12 * 1024 * 1024) return fail(413, 'IMAGE_TOO_LARGE', 'Zdjęcie jest za duże.');
 
-    let body: { imageBase64?: unknown; hint?: unknown };
+    let body: { imageBase64?: unknown; hint?: unknown; text?: unknown };
     try {
       body = await req.json();
     } catch {
       return fail(400, 'BAD_REQUEST', 'Niepoprawny JSON.');
     }
     const raw = typeof body?.imageBase64 === 'string' ? body.imageBase64.replace(/^data:[^;]+;base64,/, '') : '';
-    if (!raw) return fail(400, 'BAD_REQUEST', 'Brak zdjęcia w zapytaniu.');
+    const text = typeof body?.text === 'string' ? body.text.trim() : '';
+    const hint = typeof body?.hint === 'string' ? body.hint : undefined;
 
-    let bytes: Uint8Array;
-    try {
-      bytes = Uint8Array.from(atob(raw), (c) => c.charCodeAt(0));
-    } catch {
-      return fail(400, 'BAD_IMAGE', 'Uszkodzone dane zdjęcia.');
+    let image: Image | null = null;
+    if (raw) {
+      let bytes: Uint8Array;
+      try {
+        bytes = Uint8Array.from(atob(raw), (c) => c.charCodeAt(0));
+      } catch {
+        return fail(400, 'BAD_IMAGE', 'Uszkodzone dane zdjęcia.');
+      }
+      if (bytes.length > MAX_IMAGE_BYTES) return fail(413, 'IMAGE_TOO_LARGE', 'Zdjęcie jest za duże.');
+      const mediaType = detectMediaType(bytes);
+      if (!mediaType) return fail(400, 'BAD_IMAGE', 'Nieobsługiwany plik zdjęcia (wymagany JPEG, PNG lub WebP).');
+      image = { base64: raw, mediaType };
+    } else if (text.length < 2) {
+      return fail(400, 'BAD_REQUEST', 'Wyślij zdjęcie albo opis posiłku.');
     }
-    if (bytes.length > MAX_IMAGE_BYTES) return fail(413, 'IMAGE_TOO_LARGE', 'Zdjęcie jest za duże.');
-    const mediaType = detectMediaType(bytes);
-    if (!mediaType) return fail(400, 'BAD_IMAGE', 'Nieobsługiwany plik zdjęcia (wymagany JPEG, PNG lub WebP).');
 
     try {
-      const result = await analyze(raw, mediaType, typeof body.hint === 'string' ? body.hint : undefined);
+      const result = await analyze(image, image ? hint : text);
       console.log(`[analyze] OK ${result.items.length} składników, ${result.totals.kcal} kcal, ${Date.now() - started} ms`);
       return json(200, result);
     } catch (err) {

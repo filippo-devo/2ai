@@ -117,17 +117,22 @@ function getClient(): Anthropic {
   return client;
 }
 
-export async function analyzeMealPhoto(
-  imageBase64: string,
-  mediaType: "image/jpeg" | "image/png" | "image/webp",
-  hint?: string,
-): Promise<AnalysisResult> {
+export interface MealImage {
+  base64: string;
+  mediaType: "image/jpeg" | "image/png" | "image/webp";
+}
+
+/** Analiza zdjęcia (z opcjonalnym opisem) albo samego opisu tekstowego, gdy `image` jest null. */
+export async function analyzeMeal(image: MealImage | null, hint?: string): Promise<AnalysisResult> {
   const anthropic = getClient();
   const model = getModel();
 
-  const userText = hint?.trim()
-    ? `Analyze this meal photo. User's description: """${hint.trim().slice(0, 500)}"""`
-    : "Analyze this meal photo.";
+  const description = hint?.trim().slice(0, 1000);
+  const userText = image
+    ? description
+      ? `Analyze this meal photo. User's description: """${description}"""`
+      : "Analyze this meal photo."
+    : `Analyze this meal description (no photo): """${description}"""`;
 
   let message;
   try {
@@ -145,10 +150,12 @@ export async function analyzeMealPhoto(
       messages: [
         {
           role: "user",
-          content: [
-            { type: "image", source: { type: "base64", media_type: mediaType, data: imageBase64 } },
-            { type: "text", text: userText },
-          ],
+          content: image
+            ? [
+                { type: "image", source: { type: "base64", media_type: image.mediaType, data: image.base64 } },
+                { type: "text", text: userText },
+              ]
+            : [{ type: "text", text: userText }],
         },
       ],
     });
@@ -168,7 +175,7 @@ export async function analyzeMealPhoto(
   }
 
   if (parsed.status === "no_food") {
-    throw new AnalysisError(422, "NO_FOOD", parsed.notes || "Na zdjęciu nie rozpoznano jedzenia.");
+    throw new AnalysisError(422, "NO_FOOD", parsed.notes || "Nie rozpoznano jedzenia.");
   }
 
   // Walidacja i normalizacja liczb – nie ufamy ślepo wartościom z modelu.

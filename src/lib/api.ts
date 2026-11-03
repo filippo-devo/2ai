@@ -88,23 +88,28 @@ export async function checkHealth(baseUrl: string): Promise<HealthInfo> {
   return { ok: !!body.ok, apiKeyConfigured: !!body.apiKeyConfigured, model: String(body.model ?? '') };
 }
 
-export async function analyzePhoto(baseUrl: string, imageBase64: string, hint?: string): Promise<AnalysisResult> {
+export function analyzePhoto(baseUrl: string, imageBase64: string, hint?: string): Promise<AnalysisResult> {
+  return postAnalyze(baseUrl, { imageBase64, hint: hint?.trim() || undefined });
+}
+
+/** Analiza samego opisu (wpisanego albo podyktowanego), bez zdjęcia. */
+export function analyzeText(baseUrl: string, text: string): Promise<AnalysisResult> {
+  return postAnalyze(baseUrl, { text: text.trim() });
+}
+
+async function postAnalyze(baseUrl: string, payload: Record<string, unknown>): Promise<AnalysisResult> {
   if (!baseUrl) {
-    throw new ApiError('BACKEND_NOT_CONFIGURED', 'Nie ustawiono adresu backendu. Wpisz go w Ustawieniach.');
+    throw new ApiError('BACKEND_NOT_CONFIGURED', 'Nie ustawiono adresu serwera. Wpisz go w Ustawieniach.');
   }
   const res = await request(
     `${baseUrl}/analyze`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ imageBase64, hint: hint?.trim() || undefined }),
-    },
+    { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) },
     150_000,
   );
   if (!res.ok) throw await readError(res);
   const data = (await res.json()) as AnalysisResult;
   if (!data || !Array.isArray(data.items) || data.items.length === 0) {
-    throw new ApiError('BAD_RESPONSE', 'Backend zwrócił niepełny wynik analizy.');
+    throw new ApiError('BAD_RESPONSE', 'Serwer zwrócił niepełny wynik analizy.');
   }
   return data;
 }

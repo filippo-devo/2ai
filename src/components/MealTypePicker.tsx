@@ -1,6 +1,6 @@
 import { Pressable, Text, View } from 'react-native';
 import { MEAL_TYPES, type MealType } from '../lib/types';
-import { colors } from './ui';
+import { colors, fonts } from './ui';
 
 export function MealTypePicker({ value, onChange }: { value: MealType; onChange: (t: MealType) => void }) {
   return (
@@ -22,7 +22,7 @@ export function MealTypePicker({ value, onChange }: { value: MealType; onChange:
               backgroundColor: active ? colors.primary : '#fff',
             }}
           >
-            <Text style={{ color: active ? '#fff' : colors.text, fontWeight: '600' }}>{t.label}</Text>
+            <Text style={{ color: active ? '#fff' : colors.text, fontFamily: fonts.semibold }}>{t.label}</Text>
           </Pressable>
         );
       })}

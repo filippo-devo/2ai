@@ -1,7 +1,7 @@
 import { Pressable, Text, TextInput, View } from 'react-native';
 import { fmtKcal, itemTotals, per100FromPortion } from '../lib/nutrition';
 import type { ItemDraft, Macros } from '../lib/types';
-import { Badge, Card, NumField, colors, styles } from './ui';
+import { Card, Icon, NumField, colors, fonts, styles } from './ui';
 
 /**
  * Edycja jednego składnika. Pola kcal/B/W/T dotyczą PORCJI o podanej gramaturze.
@@ -29,13 +29,13 @@ export function ItemEditor({
     <Card style={{ gap: 10 }}>
       <View style={styles.row}>
         <TextInput
-          style={[styles.input, { flex: 1, fontWeight: '600' }]}
+          style={[styles.input, { flex: 1, fontFamily: fonts.semibold }]}
           value={item.name}
           placeholder="Nazwa składnika"
           onChangeText={(name) => onChange({ ...item, name })}
         />
         <Pressable onPress={onRemove} hitSlop={10} accessibilityLabel="Usuń składnik">
-          <Text style={{ color: colors.danger, fontSize: 22, paddingHorizontal: 6 }}>✕</Text>
+          <Icon name="close" size={22} color={colors.danger} />
         </Pressable>
       </View>
 
@@ -64,7 +64,6 @@ export function ItemEditor({
           na 100 g: {fmtKcal(item.per100.kcal)} kcal · B {item.per100.protein.toFixed(1)} · W {item.per100.carbs.toFixed(1)} · T{' '}
           {item.per100.fat.toFixed(1)}
         </Text>
-        {item.aiEstimated && <Badge text="≈ AI" />}
       </View>
       {!(item.grams > 0) && <Text style={styles.error}>Podaj gramaturę większą od 0.</Text>}
     </Card>
