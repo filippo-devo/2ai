@@ -60,3 +60,27 @@ jobs:
           done
           echo "::error::Funkcja nie odpowiada poprawnie pod $URL"
           exit 1
+
+      - name: Test analizy (prawdziwe zapytanie do Claude, obrazek bez jedzenia)
+        run: |
+          python3 - <<'PY'
+          import base64, json, struct, urllib.request, urllib.error, zlib, os
+          def chunk(t, d): return struct.pack('>I', len(d)) + t + d + struct.pack('>I', zlib.crc32(t + d) & 0xffffffff)
+          w = h = 64
+          raw = b''.join(b'\x00' + b'\x30\x60\xc0' * w for _ in range(h))
+          png = b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', w, h, 8, 2, 0, 0, 0)) + chunk(b'IDAT', zlib.compress(raw)) + chunk(b'IEND', b'')
+          url = f"https://{os.environ['SUPABASE_PROJECT_REF']}.supabase.co/functions/v1/calai/analyze"
+          req = urllib.request.Request(url, data=json.dumps({'imageBase64': base64.b64encode(png).decode()}).encode(), headers={'Content-Type': 'application/json'})
+          try:
+              status, body = 200, json.load(urllib.request.urlopen(req, timeout=150))
+          except urllib.error.HTTPError as e:
+              status, body = e.code, json.load(e)
+          print(status, json.dumps(body, ensure_ascii=False)[:500])
+          code = (body.get('error') or {}).get('code')
+          # Dla jednolitego obrazka oczekujemy odpowiedzi modelu (NO_FOOD/UNREADABLE) albo wyniku – to znaczy, że klucz i zapytanie działają.
+          if status == 200 or code in ('NO_FOOD', 'UNREADABLE'):
+              print('OK: serwer poprawnie rozmawia z Claude')
+          else:
+              print(f'::error::Analiza nie działa: {code}')
+              raise SystemExit(1)
+          PY
