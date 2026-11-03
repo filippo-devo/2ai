@@ -11,11 +11,10 @@ export type QuickEntry =
   | { id: string; at: number; image: string; status: 'error'; code: string; message: string };
 
 interface SessionState {
-  apiKey: string | null;
   entries: QuickEntry[];
 }
 
-let state: SessionState = { apiKey: null, entries: [] };
+let state: SessionState = { entries: [] };
 const listeners = new Set<() => void>();
 
 function set(next: Partial<SessionState>) {
@@ -29,7 +28,6 @@ export const session = {
     listeners.add(l);
     return () => listeners.delete(l);
   },
-  setApiKey: (apiKey: string | null) => set({ apiKey }),
   add: (e: QuickEntry) => set({ entries: [e, ...state.entries] }),
   update: (e: QuickEntry) => set({ entries: state.entries.map((x) => (x.id === e.id ? e : x)) }),
   remove: (id: string) => set({ entries: state.entries.filter((x) => x.id !== id) }),

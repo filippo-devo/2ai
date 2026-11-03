@@ -4,6 +4,7 @@ import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, T
 import { Button, Card, NumField, colors, styles } from '../components/ui';
 import { DEFAULT_GOALS, getBackendUrl, getGoals, saveBackendUrl, saveGoals } from '../db/repo';
 import { ApiError, checkHealth, normalizeBackendUrl } from '../lib/api';
+import { CLOUD_API_URL } from '../lib/backend';
 import type { Goals } from '../lib/types';
 
 export default function SettingsScreen() {
@@ -43,7 +44,7 @@ export default function SettingsScreen() {
     setTestResult(null);
     try {
       const normalized = await onSaveUrl();
-      const h = await checkHealth(normalized);
+      const h = await checkHealth(normalized || CLOUD_API_URL);
       setTestResult(
         h.apiKeyConfigured
           ? { ok: true, text: `Połączono ✓ (model: ${h.model})` }
@@ -74,15 +75,16 @@ export default function SettingsScreen() {
         </Card>
 
         <Card>
-          <Text style={styles.h2}>Backend do analizy zdjęć</Text>
+          <Text style={styles.h2}>Serwer do analizy zdjęć</Text>
           <Text style={styles.muted}>
-            Adres komputera, na którym działa backend (ta sama sieć Wi-Fi), np. 192.168.1.20:3001. Adres wypisuje backend przy starcie.
+            Zostaw puste, żeby używać serwera w chmurze (domyślnie). Wpisz adres tylko wtedy, gdy uruchamiasz własny backend na
+            komputerze w tej samej sieci Wi-Fi, np. 192.168.1.20:3001.
           </Text>
           <TextInput
             style={styles.input}
             value={url}
             onChangeText={setUrl}
-            placeholder="http://192.168.1.20:3001"
+            placeholder="puste = serwer w chmurze"
             autoCapitalize="none"
             autoCorrect={false}
             keyboardType="url"

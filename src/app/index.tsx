@@ -4,9 +4,8 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { useState } from 'react';
 import { Alert, Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { Badge, Button, Card, colors, styles } from '../components/ui';
-import { getBackendUrl } from '../db/repo';
-import { analyzePhoto, ApiError, type AnalysisResult } from '../lib/api';
-import { analyzeWithClaude } from '../lib/claude';
+import { analyzePhoto, ApiError } from '../lib/api';
+import { getEffectiveBackendUrl } from '../lib/backend';
 import { newKey } from '../lib/draft';
 import { prepareImage } from '../lib/image';
 import { fmtG, fmtKcal } from '../lib/nutrition';
@@ -15,17 +14,13 @@ import { session, useSession, type QuickEntry } from '../lib/session';
 
 const CONFIDENCE: Record<string, string> = { low: 'niska', medium: 'średnia', high: 'wysoka' };
 
-/** Usuwa spacje, znaki nowej linii i cudzysłowy, które łatwo wkleić razem z kluczem. */
-const cleanKey = (s: string) => s.replace(/[\s"'`„”]/g, '');
-
 /**
- * Szybka analiza: zdjęcie → kalorie. Nic nie jest zapisywane – zdjęcia, wyniki i klucz API
- * są tylko w pamięci i znikają po zamknięciu aplikacji.
+ * Szybka analiza: zdjęcie → kalorie. Analizę robi serwer w chmurze (klucz API jest tylko tam).
+ * Nic nie jest zapisywane – zdjęcia i wyniki są tylko w pamięci i znikają po zamknięciu aplikacji.
  */
 export default function QuickScreen() {
   const db = useSQLiteContext();
-  const { apiKey, entries } = useSession();
-  const [keyInput, setKeyInput] = useState('');
+  const { entries } = useSession();
   const [hint, setHint] = useState('');
 
   async function pick(fromCamera: boolean) {
@@ -63,22 +58,13 @@ export default function QuickScreen() {
 
       const text = hint;
       setHint('');
-      let result: AnalysisResult;
-      if (apiKey) {
-        result = await analyzeWithClaude(apiKey, prepared.base64, text);
-      } else {
-        const backendUrl = (await getBackendUrl(db)) ?? '';
-        result = await analyzePhoto(backendUrl, prepared.base64, text);
-      }
+      const result = await analyzePhoto(await getEffectiveBackendUrl(db), prepared.base64, text);
       session.update({ id, at, image, status: 'done', result });
     } catch (e) {
       const err = e instanceof ApiError ? e : new ApiError('UNKNOWN', String(e));
       session.update({ id, at, image, status: 'error', code: err.code, message: err.message });
-      if (err.code === 'API_KEY_INVALID') session.setApiKey(null);
     }
   }
-
-  const needsKey = !apiKey;
 
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -93,43 +79,6 @@ export default function QuickScreen() {
         }}
       />
       <ScrollView style={styles.screen} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        {needsKey ? (
-          <Card>
-            <Text style={styles.h2}>Klucz API Anthropic</Text>
-            <Text style={styles.muted}>
-              Wklej klucz (sk-ant-…) z platform.claude.com → API Keys. Klucz jest trzymany tylko w pamięci i znika po zamknięciu
-              aplikacji.
-            </Text>
-            <TextInput
-              style={styles.input}
-              value={keyInput}
-              onChangeText={setKeyInput}
-              placeholder="sk-ant-..."
-              autoCapitalize="none"
-              autoCorrect={false}
-              secureTextEntry
-            />
-            <Button
-              title="Użyj klucza"
-              disabled={cleanKey(keyInput).length < 20}
-              onPress={() => {
-                session.setApiKey(cleanKey(keyInput));
-                setKeyInput('');
-              }}
-            />
-            <Text style={styles.muted}>Masz uruchomiony własny backend? Możesz pominąć klucz – wtedy użyty zostanie adres z Dziennik → Ustawienia.</Text>
-          </Card>
-        ) : (
-          <View style={[styles.row, { justifyContent: 'space-between' }]}>
-            <Text style={[styles.muted, { flex: 1 }]}>
-              Klucz API aktywny: {apiKey.slice(0, 11)}…{apiKey.slice(-4)} (tylko do zamknięcia aplikacji)
-            </Text>
-            <Pressable onPress={() => session.setApiKey(null)} hitSlop={8}>
-              <Text style={{ color: colors.danger, fontWeight: '600' }}>Usuń klucz</Text>
-            </Pressable>
-          </View>
-        )}
-
         <Button title="📷 Zrób zdjęcie" onPress={() => pick(true)} style={{ paddingVertical: 18 }} disabled={Platform.OS === 'web'} />
         <Button title="🖼️ Wybierz z galerii" variant="secondary" onPress={() => pick(false)} />
         <TextInput
@@ -148,8 +97,8 @@ export default function QuickScreen() {
         {entries.length > 0 && <Button title="Wyczyść wyniki" variant="secondary" onPress={() => session.clear()} />}
 
         <Text style={[styles.muted, { textAlign: 'center' }]}>
-          Nic nie jest zapisywane: zdjęcia i wyniki są tylko w pamięci i znikają po zamknięciu aplikacji. Zdjęcie jest wysyłane do
-          Anthropic wyłącznie w celu analizy. Wartości są szacunkowe.
+          Nic nie jest zapisywane: zdjęcia i wyniki są tylko w pamięci i znikają po zamknięciu aplikacji. Zdjęcie jest wysyłane przez
+          serwer aplikacji do Anthropic wyłącznie w celu analizy. Wartości są szacunkowe.
         </Text>
       </ScrollView>
     </KeyboardAvoidingView>

@@ -166,6 +166,7 @@ async function main() {
   // Pomocnicze
   assert.equal(normalizeBackendUrl('http://10.0.0.5:4000/'), 'http://10.0.0.5:4000');
   assert.equal(normalizeBackendUrl(' 192.168.0.7 '), 'http://192.168.0.7:3001');
+  assert.equal(normalizeBackendUrl('https://abc.supabase.co/functions/v1/calai/'), 'https://abc.supabase.co/functions/v1/calai');
 
   fs.rmSync(dir, { recursive: true, force: true });
   console.log('OK – dane (cele, adres backendu, posiłki, składniki, edycje, usunięcia) przetrwały 4 kolejne „uruchomienia” bazy.');

@@ -36,8 +36,7 @@
     "web": "expo start --web",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tests",
     "test:db": "tsx tests/db-persistence.test.ts",
-    "lint": "expo lint",
-    "test:claude": "tsx tests/claude.test.ts"
+    "lint": "expo lint"
   },
   "private": true
 }

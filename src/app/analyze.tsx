@@ -3,8 +3,8 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Image, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, View } from 'react-native';
 import { Button, Card, colors, styles } from '../components/ui';
-import { getBackendUrl } from '../db/repo';
 import { analyzePhoto, ApiError } from '../lib/api';
+import { getEffectiveBackendUrl } from '../lib/backend';
 import { defaultMealType, isValidDay, todayString } from '../lib/dates';
 import { newKey, putDraft } from '../lib/draft';
 import { prepareImage, type PreparedImage } from '../lib/image';
@@ -46,8 +46,7 @@ export default function AnalyzeScreen() {
     const id = ++runId.current;
     setStatus({ kind: 'analyzing' });
     try {
-      const baseUrl = (await getBackendUrl(db)) ?? '';
-      const result = await analyzePhoto(baseUrl, image.base64, hint);
+      const result = await analyzePhoto(await getEffectiveBackendUrl(db), image.base64, hint);
       if (id !== runId.current) return;
       const draft: MealDraft = {
         day,
@@ -107,7 +106,7 @@ export default function AnalyzeScreen() {
           <Text style={styles.label}>Opcjonalny opis (pomaga AI), np. „owsianka na mleku 2%, ok. 300 g”</Text>
           <TextInput style={styles.input} value={hint} onChangeText={setHint} placeholder="Opis posiłku" editable={!busy} maxLength={300} />
           <Text style={styles.muted}>
-            Po naciśnięciu „Analizuj” zdjęcie zostanie wysłane do Twojego backendu i dalej do dostawcy modelu AI. Backend niczego nie
+            Po naciśnięciu „Analizuj” zdjęcie zostanie wysłane do serwera aplikacji i dalej do Anthropic. Serwer niczego nie
             zapisuje. Wynik to szacunek – sprawdź go przed zapisaniem.
           </Text>
         </Card>

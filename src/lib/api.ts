@@ -25,15 +25,18 @@ export class ApiError extends Error {
   }
 }
 
-/** "192.168.1.20" -> "http://192.168.1.20:3001"; zostawia podany protokół i port. */
+/**
+ * Normalizuje adres backendu wpisany przez użytkownika:
+ * - "192.168.1.20" -> "http://192.168.1.20:3001" (lokalny backend: http i domyślny port),
+ * - "https://xyz.supabase.co/functions/v1/calai" -> bez zmian (pełny adres zostaje taki, jak podano).
+ */
 export function normalizeBackendUrl(input: string): string {
   let url = input.trim().replace(/\/+$/, '');
   if (!url) return '';
-  if (!/^https?:\/\//i.test(url)) url = `http://${url}`;
-  const hostPart = url.replace(/^https?:\/\//i, '').split('/')[0];
-  if (!/:\d+$/.test(hostPart)) {
-    url = url.replace(hostPart, `${hostPart}:${DEFAULT_PORT}`);
-  }
+  if (/^https?:\/\//i.test(url)) return url;
+  url = `http://${url}`;
+  const hostPart = url.slice('http://'.length).split('/')[0];
+  if (!/:\d+$/.test(hostPart)) url = url.replace(hostPart, `${hostPart}:${DEFAULT_PORT}`);
   return url;
 }
 
@@ -45,6 +48,9 @@ async function request(url: string, init: RequestInit, timeoutMs: number): Promi
   } catch {
     if (controller.signal.aborted) {
       throw new ApiError('TIMEOUT', 'Przekroczono czas oczekiwania na odpowiedź backendu.');
+    }
+    if (url.startsWith('https://')) {
+      throw new ApiError('BACKEND_UNREACHABLE', 'Brak połączenia z serwerem analizy. Sprawdź, czy telefon ma internet, i spróbuj ponownie.');
     }
     throw new ApiError(
       'BACKEND_UNREACHABLE',
