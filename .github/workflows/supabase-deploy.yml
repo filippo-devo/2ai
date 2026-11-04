@@ -101,3 +101,39 @@ jobs:
               raise SystemExit(1)
           print(f"OK: {body['mealName']} – {body['totals']['kcal']} kcal")
           PY
+
+      - name: Test kodu kreskowego (Open Food Facts)
+        run: |
+          URL="https://${SUPABASE_PROJECT_REF}.supabase.co/functions/v1/calai/product/3017620422003"
+          RES=$(curl -s -m 30 "$URL")
+          echo "$RES" | head -c 400; echo
+          echo "$RES" | python3 -c "import json,sys; d=json.load(sys.stdin); k=d['items'][0]['per100g']['kcal']; assert 400 < k < 650, k; print('OK:', d['mealName'], k, 'kcal/100 g')"
+
+      - name: Test odczytu etykiety (prawdziwe zapytanie do Claude)
+        run: |
+          IM=$(command -v magick || command -v convert || true)
+          if [ -z "$IM" ]; then sudo apt-get install -y -qq imagemagick >/dev/null; IM=$(command -v magick || command -v convert); fi
+          "$IM" -size 700x520 xc:white -fill black -font DejaVu-Sans -pointsize 30 \
+            -annotate +30+60 "Płatki owsiane" \
+            -annotate +30+120 "Wartość odżywcza w 100 g" \
+            -annotate +30+180 "Wartość energetyczna  1550 kJ / 370 kcal" \
+            -annotate +30+240 "Tłuszcz  7,0 g" \
+            -annotate +30+300 "Węglowodany  60 g" \
+            -annotate +30+360 "Białko  13 g" \
+            -annotate +30+440 "Masa netto: 500 g" label.png
+          python3 - <<'PY'
+          import base64, json, os, urllib.request, urllib.error
+          url = f"https://{os.environ['SUPABASE_PROJECT_REF']}.supabase.co/functions/v1/calai/analyze"
+          data = json.dumps({'imageBase64': base64.b64encode(open('label.png', 'rb').read()).decode(), 'mode': 'label'}).encode()
+          req = urllib.request.Request(url, data=data, headers={'Content-Type': 'application/json'})
+          try:
+              status, body = 200, json.load(urllib.request.urlopen(req, timeout=150))
+          except urllib.error.HTTPError as e:
+              status, body = e.code, json.load(e)
+          print(status, json.dumps(body, ensure_ascii=False)[:500])
+          per = body['items'][0]['per100g'] if status == 200 else {}
+          if status != 200 or not (360 <= per.get('kcal', 0) <= 380) or body.get('portions', {}).get('package') != 500:
+              print('::error::Odczyt etykiety nie działa poprawnie')
+              raise SystemExit(1)
+          print('OK: etykieta odczytana', per)
+          PY

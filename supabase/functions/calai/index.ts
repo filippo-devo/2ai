@@ -1,7 +1,8 @@
 // Serwer analizy zdjęć CalAI – Supabase Edge Function (Deno).
 //
 //   GET  /functions/v1/calai/health   → status i informacja, czy klucz API jest ustawiony
-//   POST /functions/v1/calai/analyze  → { imageBase64, hint? } albo { text } → składniki, kcal i makro
+//   POST /functions/v1/calai/analyze  → { imageBase64, hint? } | { text } | { imageBase64, mode: 'label' } → składniki, kcal i makro
+//   GET  /functions/v1/calai/product/<kod> → produkt z Open Food Facts (wartości na 100 g, porcja, opakowanie)
 //
 // Klucz Anthropic jest sekretem funkcji (ANTHROPIC_API_KEY) – nie ma go w aplikacji ani w repozytorium.
 // Funkcja niczego nie zapisuje: zdjęcie jest tylko w pamięci na czas jednego zapytania.
@@ -181,6 +182,150 @@ async function analyze(image: Image | null, hint?: string) {
   };
 }
 
+
+// ---------- etykieta (tabela wartości odżywczych) ----------
+
+const LabelResult = z.object({
+  status: z.enum(['ok', 'no_label', 'unreadable']),
+  product_name: z.string().describe('Nazwa produktu po polsku, z opakowania jeśli widoczna'),
+  kcal_per_100g: z.number(),
+  protein_per_100g: z.number(),
+  carbs_per_100g: z.number(),
+  fat_per_100g: z.number(),
+  serving_grams: z.number().nullable().describe('Wielkość porcji w gramach, jeśli podana na etykiecie'),
+  package_grams: z.number().nullable().describe('Masa netto opakowania w gramach, jeśli widoczna'),
+  notes: z.string().describe('Krótko po polsku: co przeliczono albo dlaczego status nie jest ok'),
+});
+
+const LABEL_PROMPT = `You read nutrition facts labels from photos of food packaging for a calorie-tracking app.
+
+- Read the values exactly as printed. Return energy in kcal and protein, carbohydrates and fat per 100 g (treat 100 ml as 100 g).
+- If the label only gives values per serving, convert them to per 100 g using the stated serving size, and say so in the notes.
+- If energy is only given in kJ, convert to kcal (divide by 4.184).
+- serving_grams: the serving size in grams if printed, otherwise null. package_grams: the net weight in grams if visible, otherwise null.
+- product_name: the product name in Polish if you can read it, otherwise a short generic Polish name (e.g. "jogurt naturalny").
+- If there is no nutrition table in the photo, return status "no_label". If the table is too blurry or cut off to read the key values, return status "unreadable". Never guess numbers you cannot read; use 0 for the values in those cases.`;
+
+async function analyzeLabel(image: Image) {
+  const anthropic = getClient();
+  let message;
+  try {
+    message = await anthropic.beta.messages.parse({
+      model: MODEL,
+      max_tokens: 16000,
+      betas: ['server-side-fallback-2026-07-01'],
+      fallbacks: 'default',
+      system: LABEL_PROMPT,
+      output_config: { effort: 'medium', format: betaZodOutputFormat(LabelResult) },
+      messages: [
+        {
+          role: 'user',
+          content: [
+            { type: 'image', source: { type: 'base64', media_type: image.mediaType, data: image.base64 } },
+            { type: 'text', text: 'Read this nutrition label.' },
+          ],
+        },
+      ],
+    });
+  } catch (err) {
+    throw mapSdkError(err);
+  }
+  if (message.stop_reason === 'refusal') throw new AnalysisError(422, 'REFUSED', 'Model odmówił odczytania tej etykiety.');
+  const p = message.parsed_output;
+  if (!p) throw new AnalysisError(502, 'BAD_MODEL_OUTPUT', 'Model nie zwrócił poprawnego wyniku. Spróbuj ponownie.');
+  if (p.status === 'no_label') throw new AnalysisError(422, 'NO_LABEL', p.notes || 'Nie widzę tabeli wartości odżywczych. Zrób zdjęcie tyłu opakowania.');
+  if (p.status === 'unreadable' || !(p.kcal_per_100g > 0)) {
+    throw new AnalysisError(422, 'UNREADABLE', p.notes || 'Etykieta jest nieczytelna – podejdź bliżej i zrób ostrzejsze zdjęcie.');
+  }
+  const serving = p.serving_grams && p.serving_grams > 0 ? Math.round(p.serving_grams) : null;
+  const pkg = p.package_grams && p.package_grams > 0 ? Math.round(p.package_grams) : null;
+  return productResult(
+    p.product_name.trim() || 'Produkt',
+    { kcal: p.kcal_per_100g, protein: p.protein_per_100g, carbs: p.carbs_per_100g, fat: p.fat_per_100g },
+    serving,
+    pkg,
+    message.model,
+    p.notes.trim(),
+  );
+}
+
+/** Wynik dla pojedynczego produktu (etykieta / kod kreskowy) w tym samym formacie co analiza posiłku. */
+function productResult(name: string, per: Macros, serving: number | null, pkg: number | null, model: string, notes = '') {
+  const per100g: Macros = {
+    kcal: Math.round(clamp(per.kcal, 0, 900)),
+    protein: round1(clamp(per.protein, 0, 100)),
+    carbs: round1(clamp(per.carbs, 0, 100)),
+    fat: round1(clamp(per.fat, 0, 100)),
+  };
+  const grams = serving ?? pkg ?? 100;
+  const f = grams / 100;
+  const totals: Macros = {
+    kcal: Math.round(per100g.kcal * f),
+    protein: round1(per100g.protein * f),
+    carbs: round1(per100g.carbs * f),
+    fat: round1(per100g.fat * f),
+  };
+  return {
+    estimated: true,
+    mealName: name,
+    confidence: 'high' as const,
+    notes,
+    model,
+    items: [{ name, grams, per100g, totals }],
+    totals,
+    portions: { serving, package: pkg },
+  };
+}
+
+// ---------- kod kreskowy (Open Food Facts) ----------
+
+async function lookupProduct(code: string) {
+  if (!/^\d{8,14}$/.test(code)) throw new AnalysisError(400, 'BAD_REQUEST', 'Niepoprawny kod kreskowy.');
+  const fields = 'code,product_name,product_name_pl,brands,product_quantity,serving_quantity,nutriments';
+  let res: Response;
+  try {
+    res = await fetch(`https://world.openfoodfacts.org/api/v2/product/${code}.json?fields=${fields}`, {
+      headers: { 'User-Agent': 'kes-calai/1.0 (Supabase Edge Function)' },
+      signal: AbortSignal.timeout(15_000),
+    });
+  } catch {
+    throw new AnalysisError(503, 'UPSTREAM_UNAVAILABLE', 'Baza produktów nie odpowiada. Spróbuj ponownie albo zrób zdjęcie etykiety.');
+  }
+  const j = (await res.json().catch(() => null)) as {
+    status?: number;
+    product?: {
+      product_name?: string;
+      product_name_pl?: string;
+      brands?: string;
+      product_quantity?: number | string;
+      serving_quantity?: number | string;
+      nutriments?: Record<string, number | string | undefined>;
+    };
+  } | null;
+  if (!j || j.status !== 1 || !j.product) {
+    throw new AnalysisError(404, 'PRODUCT_NOT_FOUND', 'Nie znam tego produktu. Zrób zdjęcie etykiety z wartościami odżywczymi.');
+  }
+  const n = j.product.nutriments ?? {};
+  const num = (v: unknown) => (v === undefined || v === null || v === '' ? NaN : Number(v));
+  let kcal = num(n['energy-kcal_100g']);
+  if (!Number.isFinite(kcal)) kcal = num(n['energy_100g']) / 4.184;
+  if (!Number.isFinite(kcal)) {
+    throw new AnalysisError(422, 'NO_NUTRITION', 'Ten produkt nie ma w bazie wartości odżywczych. Zrób zdjęcie etykiety.');
+  }
+  const brand = (j.product.brands ?? '').split(',')[0]?.trim();
+  const base = (j.product.product_name_pl || j.product.product_name || '').trim() || 'Produkt';
+  const name = brand && !base.toLowerCase().includes(brand.toLowerCase()) ? `${base} · ${brand}` : base;
+  const pos = (v: unknown) => (Number.isFinite(num(v)) && num(v) > 0 ? Math.round(num(v)) : null);
+  const g = (k: string) => (Number.isFinite(num(n[k])) ? num(n[k]) : 0);
+  return productResult(
+    name,
+    { kcal, protein: g('proteins_100g'), carbs: g('carbohydrates_100g'), fat: g('fat_100g') },
+    pos(j.product.serving_quantity),
+    pos(j.product.product_quantity),
+    'openfoodfacts',
+  );
+}
+
 function mapSdkError(err: unknown): AnalysisError {
   if (err instanceof AnalysisError) return err;
   if (err instanceof Anthropic.AuthenticationError || err instanceof Anthropic.PermissionDeniedError) {
@@ -231,13 +376,23 @@ Deno.serve(async (req) => {
     return json(200, { ok: true, service: 'calai-backend', apiKeyConfigured: !!Deno.env.get('ANTHROPIC_API_KEY')?.trim(), model: MODEL });
   }
 
+  const productMatch = path.match(/\/product\/(\d{8,14})$/);
+  if (req.method === 'GET' && productMatch) {
+    try {
+      return json(200, await lookupProduct(productMatch[1]));
+    } catch (err) {
+      const e = mapSdkError(err);
+      return fail(e.status, e.code, e.message);
+    }
+  }
+
   if (req.method === 'POST' && path.endsWith('/analyze')) {
     const started = Date.now();
     const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
     if (!allow(ip)) return fail(429, 'RATE_LIMITED', `Limit ${HOURLY_LIMIT_PER_IP} analiz na godzinę został wyczerpany. Spróbuj później.`);
     if (Number(req.headers.get('content-length') ?? 0) > 12 * 1024 * 1024) return fail(413, 'IMAGE_TOO_LARGE', 'Zdjęcie jest za duże.');
 
-    let body: { imageBase64?: unknown; hint?: unknown; text?: unknown };
+    let body: { imageBase64?: unknown; hint?: unknown; text?: unknown; mode?: unknown };
     try {
       body = await req.json();
     } catch {
@@ -246,6 +401,7 @@ Deno.serve(async (req) => {
     const raw = typeof body?.imageBase64 === 'string' ? body.imageBase64.replace(/^data:[^;]+;base64,/, '') : '';
     const text = typeof body?.text === 'string' ? body.text.trim() : '';
     const hint = typeof body?.hint === 'string' ? body.hint : undefined;
+    const mode = body?.mode === 'label' ? 'label' : 'meal';
 
     let image: Image | null = null;
     if (raw) {
@@ -264,7 +420,7 @@ Deno.serve(async (req) => {
     }
 
     try {
-      const result = await analyze(image, image ? hint : text);
+      const result = mode === 'label' && image ? await analyzeLabel(image) : await analyze(image, image ? hint : text);
       console.log(`[analyze] OK ${result.items.length} składników, ${result.totals.kcal} kcal, ${Date.now() - started} ms`);
       return json(200, result);
     } catch (err) {
