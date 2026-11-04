@@ -48,6 +48,7 @@ export default function RootLayout() {
           <Stack.Screen name="index" options={{ headerShown: false, contentStyle: { backgroundColor: '#000' } }} />
           <Stack.Screen name="scan/[id]" options={{ headerShown: false }} />
           <Stack.Screen name="describe" options={{ headerShown: false, presentation: 'modal' }} />
+          <Stack.Screen name="fix/[id]" options={{ headerShown: false, presentation: 'modal' }} />
           <Stack.Screen name="recent" options={{ title: 'Ostatnie' }} />
           <Stack.Screen name="diary" options={{ title: 'Dziennik' }} />
           <Stack.Screen name="day/[date]" options={{ title: 'Dzień' }} />

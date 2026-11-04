@@ -14,16 +14,24 @@ Wszystkie dane są zapisywane **lokalnie na telefonie**. Do analizy zdjęć słu
 
 ## Najprościej: zdjęcie → kalorie (bez zapisywania)
 
-Aplikacja startuje od razu na aparacie. Nie trzeba wpisywać żadnego klucza.
+Aplikacja startuje od razu na aparacie. Nie trzeba wpisywać żadnego klucza. Na dole są trzy tryby, jak w Cal AI:
 
-1. Otwórz aplikację w Expo Go (Home → Projects → calai-mvp) i zezwól na aparat.
-2. Stuknij spust. Zdjęcie od razu przechodzi do analizy: widać je z linią skanowania, a po kilkunastu sekundach pojawiają się kalorie, makro i składniki.
-3. Każdy składnik można stuknąć i poprawić: nazwę, gramaturę (przyciski −/+ o 10 g), kalorie i makro. Zmiana gramatury przelicza resztę. Można też dodać lub usunąć składnik.
-4. **Galeria** analizuje zdjęcie z telefonu.
-5. **Powiedz** pozwala opisać posiłek tekstem albo głosem. Do dyktowania służy mikrofon na systemowej klawiaturze, bo Expo Go nie ma wbudowanego rozpoznawania mowy. Stamtąd można też **wpisać wartości ręcznie**.
-6. Ikona zegara pokazuje wyniki z bieżącej sesji. Pełny Dziennik z zapisywaniem jest dostępny z tej listy.
+- **Posiłek** – zdjęcie talerza. Widać je z linią skanowania, a po kilkunastu sekundach pojawiają się kalorie, makro i składniki.
+- **Kod kreskowy** – wystarczy skierować aparat na kod, spust nie jest potrzebny. Dane produktu pochodzą z bazy Open Food Facts, którą odpytuje serwer.
+- **Etykieta** – zdjęcie tabeli wartości odżywczych. Claude odczytuje wartości na 100 g, porcję i masę opakowania.
 
-Wygląd wzorowany na ekranach aplikacji Oura, BitePal, Yazio, Bevel i Cal AI z Mobbin. Czcionki: Instrument Serif (nagłówki, liczby) i Manrope (tekst). Ikony: Ionicons.
+Na ekranie wyniku:
+- **Liczba porcji** (− / +, krok 0,5).
+- **Miara** dla produktów: porcja, opakowanie albo 100 g.
+- **Edycja składników**: nazwa, gramatura (−/+ 10 g), kalorie i makro. Można też dodać składnik.
+- **Popraw** (dla zdjęć i opisów): opisujesz, co się nie zgadza, np. „brakuje fety, kurczak smażony na maśle”, a model przelicza posiłek jeszcze raz ze zdjęciem.
+
+Pozostałe funkcje:
+- **Galeria** analizuje zdjęcie z telefonu w bieżącym trybie.
+- **Powiedz** pozwala opisać posiłek tekstem albo głosem. Do dyktowania służy mikrofon na systemowej klawiaturze. Stamtąd można też wpisać wartości ręcznie.
+- Ikona zegara otwiera listę **Ostatnio dodane** z bieżącej sesji, z linkiem do Dziennika.
+
+Wygląd wzorowany na ekranach Cal AI z Mobbin (skanowanie, szczegóły produktu, „Fix result”, „Recently uploaded”). Czcionki: Manrope oraz Instrument Serif w logo. Ikony: Ionicons i Material Community Icons.
 
 Analizę wykonuje serwer w chmurze: Supabase Edge Function `supabase/functions/calai`. Klucz API Anthropic jest wyłącznie sekretem tej funkcji, nie ma go ani w aplikacji, ani w repozytorium. Funkcję wdraża workflow `.github/workflows/supabase-deploy.yml` z sekretów repozytorium: `SUPABASE_ACCESS_TOKEN`, `SUPABASE_PROJECT_REF` i `ANTHROPIC_API_KEY`. Po wdrożeniu workflow robi jedno prawdziwe testowe zapytanie.
 

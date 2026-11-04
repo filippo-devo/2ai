@@ -17,6 +17,8 @@ export interface AnalysisResult {
   model: string;
   items: AnalysisItem[];
   totals: Macros;
+  /** Dla produktów (kod kreskowy / etykieta): wielkość porcji i masa opakowania w gramach, jeśli znane. */
+  portions?: { serving: number | null; package: number | null };
 }
 
 export class ApiError extends Error {
@@ -90,6 +92,23 @@ export async function checkHealth(baseUrl: string): Promise<HealthInfo> {
 
 export function analyzePhoto(baseUrl: string, imageBase64: string, hint?: string): Promise<AnalysisResult> {
   return postAnalyze(baseUrl, { imageBase64, hint: hint?.trim() || undefined });
+}
+
+/** Odczyt tabeli wartości odżywczych ze zdjęcia opakowania. */
+export function analyzeLabel(baseUrl: string, imageBase64: string): Promise<AnalysisResult> {
+  return postAnalyze(baseUrl, { imageBase64, mode: 'label' });
+}
+
+/** Produkt po kodzie kreskowym (serwer pyta bazę Open Food Facts). */
+export async function lookupProduct(baseUrl: string, code: string): Promise<AnalysisResult> {
+  if (!baseUrl) throw new ApiError('BACKEND_NOT_CONFIGURED', 'Nie ustawiono adresu serwera. Wpisz go w Ustawieniach.');
+  const res = await request(`${baseUrl}/product/${encodeURIComponent(code)}`, { method: 'GET' }, 30_000);
+  if (!res.ok) throw await readError(res);
+  const data = (await res.json()) as AnalysisResult;
+  if (!data || !Array.isArray(data.items) || data.items.length === 0) {
+    throw new ApiError('BAD_RESPONSE', 'Serwer zwrócił niepełne dane produktu.');
+  }
+  return data;
 }
 
 /** Analiza samego opisu (wpisanego albo podyktowanego), bez zdjęcia. */

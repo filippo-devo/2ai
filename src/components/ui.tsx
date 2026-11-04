@@ -24,20 +24,20 @@ export const fonts = {
 };
 
 export const colors = {
-  bg: '#F4F1EC',
+  bg: '#FFFFFF',
   card: '#FFFFFF',
-  text: '#16130F',
-  muted: '#8A837A',
-  border: '#E7E1D8',
-  primary: '#16130F',
-  danger: '#C2410C',
+  text: '#111111',
+  muted: '#8E8E93',
+  border: '#ECECEF',
+  primary: '#111111',
+  danger: '#D93B30',
   warn: '#B26A00',
-  kcal: '#16130F',
-  accent: '#E8643B',
-  protein: '#E5484D',
-  carbs: '#E9A23B',
-  fat: '#3E7BFA',
-  chip: '#EFEAE2',
+  kcal: '#111111',
+  accent: '#111111',
+  protein: '#E5594F',
+  carbs: '#E8A23B',
+  fat: '#4A86E8',
+  chip: '#F3F3F5',
 };
 
 export type IconName = React.ComponentProps<typeof Ionicons>['name'];
@@ -152,7 +152,7 @@ export function Badge({ text, color = colors.warn }: { text: string; color?: str
 export const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   content: { padding: 20, gap: 14, paddingBottom: 48 },
-  card: { backgroundColor: colors.card, borderRadius: 22, padding: 16, borderWidth: 1, borderColor: colors.border, gap: 8 },
+  card: { backgroundColor: colors.card, borderRadius: 20, padding: 16, borderWidth: 1, borderColor: colors.border, gap: 8 },
   h1: { fontSize: 34, fontFamily: fonts.display, color: colors.text, letterSpacing: -0.3 },
   h2: { fontSize: 17, fontFamily: fonts.bold, color: colors.text },
   text: { fontSize: 15, fontFamily: fonts.medium, color: colors.text },

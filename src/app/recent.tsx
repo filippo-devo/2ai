@@ -1,8 +1,17 @@
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router, Stack } from 'expo-router';
-import { FlatList, Image, Pressable, StyleSheet, Text, View } from 'react-native';
-import { Icon, colors, fonts } from '../components/ui';
-import { fmtKcal, mealTotals } from '../lib/nutrition';
-import { session, useSession, type QuickEntry } from '../lib/session';
+import { ActivityIndicator, FlatList, Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Icon, colors, fonts, type IconName } from '../components/ui';
+import { fmtKcal } from '../lib/nutrition';
+import { entryName, entryTotals, session, useSession, type QuickEntry } from '../lib/session';
+
+const ICON: Record<QuickEntry['source'], IconName> = {
+  photo: 'restaurant-outline',
+  label: 'document-text-outline',
+  barcode: 'barcode-outline',
+  text: 'chatbubble-ellipses-outline',
+  manual: 'create-outline',
+};
 
 /** Wyniki z bieżącej sesji (tylko w pamięci – znikają po zamknięciu aplikacji). */
 export default function RecentScreen() {
@@ -11,6 +20,7 @@ export default function RecentScreen() {
     <>
       <Stack.Screen
         options={{
+          title: 'Ostatnio dodane',
           headerRight: () =>
             entries.length > 0 ? (
               <Pressable onPress={() => session.clear()} hitSlop={8}>
@@ -21,14 +31,17 @@ export default function RecentScreen() {
       />
       <FlatList
         style={{ flex: 1, backgroundColor: colors.bg }}
-        contentContainerStyle={{ padding: 20, gap: 12 }}
+        contentContainerStyle={{ padding: 16, gap: 12 }}
         data={entries}
         keyExtractor={(e) => e.id}
         renderItem={({ item }) => <Row entry={item} />}
         ListEmptyComponent={
           <View style={s.empty}>
-            <Text style={s.emptyTitle}>Jeszcze pusto</Text>
-            <Text style={s.emptyText}>Zrób zdjęcie posiłku, a wynik pojawi się tutaj.</Text>
+            <View style={s.emptyIcon}>
+              <Icon name="camera-outline" size={28} color={colors.muted} />
+            </View>
+            <Text style={s.emptyTitle}>Jeszcze nic tu nie ma</Text>
+            <Text style={s.emptyText}>Zrób zdjęcie posiłku, zeskanuj kod albo etykietę.</Text>
           </View>
         }
         ListFooterComponent={
@@ -44,44 +57,79 @@ export default function RecentScreen() {
 }
 
 function Row({ entry }: { entry: QuickEntry }) {
-  const kcal = mealTotals(entry.items).kcal;
+  const t = entryTotals(entry);
   const time = new Date(entry.at).toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' });
   return (
-    <Pressable onPress={() => router.push({ pathname: '/scan/[id]', params: { id: entry.id } })} style={s.row}>
+    <Pressable onPress={() => router.push({ pathname: '/scan/[id]', params: { id: entry.id } })} style={s.card}>
       {entry.image ? (
         <Image source={{ uri: entry.image }} style={s.thumb} />
       ) : (
         <View style={[s.thumb, s.thumbEmpty]}>
-          <Icon name={entry.source === 'manual' ? 'create-outline' : 'chatbubble-ellipses-outline'} size={22} color={colors.muted} />
+          <Icon name={ICON[entry.source]} size={26} color={colors.muted} />
         </View>
       )}
-      <View style={{ flex: 1, gap: 3 }}>
-        <Text style={s.name} numberOfLines={1}>
-          {entry.status === 'analyzing' ? 'Analizuję…' : entry.status === 'error' ? 'Nie udało się' : entry.name || entry.items[0]?.name || 'Posiłek'}
-        </Text>
-        <Text style={s.time}>{time}</Text>
+      <View style={s.info}>
+        <View style={s.topLine}>
+          <Text style={s.name} numberOfLines={1}>
+            {entry.status === 'done' ? entryName(entry) : entry.status === 'error' ? 'Nie udało się' : 'Analizuję…'}
+          </Text>
+          <View style={s.timePill}>
+            <Text style={s.timeText}>{time}</Text>
+          </View>
+        </View>
+        {entry.status === 'analyzing' ? (
+          <ActivityIndicator color={colors.text} style={{ alignSelf: 'flex-start' }} />
+        ) : entry.status === 'done' ? (
+          <>
+            <View style={s.kcalRow}>
+              <MaterialCommunityIcons name="fire" size={18} color={colors.text} />
+              <Text style={s.kcal}>{fmtKcal(t.kcal)} kcal</Text>
+            </View>
+            <View style={s.macros}>
+              <Macro icon="food-drumstick" color={colors.protein} value={t.protein} />
+              <Macro icon="barley" color={colors.carbs} value={t.carbs} />
+              <Macro icon="water" color={colors.fat} value={t.fat} />
+            </View>
+          </>
+        ) : (
+          <Text style={s.error} numberOfLines={2}>
+            {entry.error?.message}
+          </Text>
+        )}
       </View>
-      {entry.status === 'done' && (
-        <Text style={s.kcal}>
-          {fmtKcal(kcal)} <Text style={s.kcalUnit}>kcal</Text>
-        </Text>
-      )}
     </Pressable>
   );
 }
 
+function Macro({ icon, color, value }: { icon: React.ComponentProps<typeof MaterialCommunityIcons>['name']; color: string; value: number }) {
+  return (
+    <View style={s.macro}>
+      <MaterialCommunityIcons name={icon} size={13} color={color} />
+      <Text style={s.macroText}>{Math.round(value)} g</Text>
+    </View>
+  );
+}
+
 const s = StyleSheet.create({
-  headerAction: { fontFamily: fonts.semibold, fontSize: 15, color: colors.danger, paddingHorizontal: 6 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 14, backgroundColor: colors.card, borderRadius: 22, padding: 10, paddingRight: 16, borderWidth: 1, borderColor: colors.border },
-  thumb: { width: 64, height: 64, borderRadius: 16 },
+  headerAction: { fontFamily: fonts.semibold, fontSize: 15, color: colors.danger, paddingHorizontal: 6, marginRight: 8 },
+  card: { flexDirection: 'row', backgroundColor: colors.card, borderRadius: 20, borderWidth: 1, borderColor: colors.border, overflow: 'hidden' },
+  thumb: { width: 104, height: 104 },
   thumbEmpty: { backgroundColor: colors.chip, alignItems: 'center', justifyContent: 'center' },
-  name: { fontFamily: fonts.semibold, fontSize: 16, color: colors.text },
-  time: { fontFamily: fonts.medium, fontSize: 13, color: colors.muted },
-  kcal: { fontFamily: fonts.display, fontSize: 26, color: colors.text },
-  kcalUnit: { fontFamily: fonts.medium, fontSize: 12, color: colors.muted },
-  empty: { alignItems: 'center', paddingVertical: 60, gap: 8 },
-  emptyTitle: { fontFamily: fonts.display, fontSize: 32, color: colors.text },
+  info: { flex: 1, padding: 14, gap: 8, justifyContent: 'center' },
+  topLine: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  name: { flex: 1, fontFamily: fonts.semibold, fontSize: 15, color: colors.text },
+  timePill: { backgroundColor: colors.chip, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3 },
+  timeText: { fontFamily: fonts.semibold, fontSize: 11, color: colors.muted },
+  kcalRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  kcal: { fontFamily: fonts.bold, fontSize: 18, color: colors.text },
+  macros: { flexDirection: 'row', gap: 12 },
+  macro: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  macroText: { fontFamily: fonts.semibold, fontSize: 12, color: colors.muted },
+  error: { fontFamily: fonts.medium, fontSize: 13, color: colors.danger },
+  empty: { alignItems: 'center', paddingVertical: 60, gap: 10 },
+  emptyIcon: { width: 64, height: 64, borderRadius: 32, backgroundColor: colors.chip, alignItems: 'center', justifyContent: 'center', marginBottom: 4 },
+  emptyTitle: { fontFamily: fonts.bold, fontSize: 20, color: colors.text },
   emptyText: { fontFamily: fonts.medium, fontSize: 15, color: colors.muted, textAlign: 'center' },
-  diary: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 12, padding: 16, borderRadius: 18, backgroundColor: colors.chip },
+  diary: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 8, padding: 16, borderRadius: 18, backgroundColor: colors.chip },
   diaryText: { flex: 1, fontFamily: fonts.semibold, fontSize: 15, color: colors.text },
 });

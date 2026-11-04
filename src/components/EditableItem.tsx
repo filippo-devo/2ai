@@ -110,7 +110,7 @@ function Field({
 }
 
 const s = StyleSheet.create({
-  wrap: { backgroundColor: colors.card, borderRadius: 20, borderWidth: 1, borderColor: colors.border },
+  wrap: { backgroundColor: colors.card, borderRadius: 18, borderWidth: 1, borderColor: colors.border },
   wrapOpen: { borderColor: colors.text },
   head: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingVertical: 14 },
   name: { fontFamily: fonts.semibold, fontSize: 15, color: colors.text },
@@ -122,10 +122,10 @@ const s = StyleSheet.create({
   label: { fontFamily: fonts.semibold, fontSize: 12, color: colors.muted, marginTop: 4 },
   stepper: { flexDirection: 'row', alignItems: 'center', gap: 10, minWidth: 0 },
   stepBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.chip, alignItems: 'center', justifyContent: 'center' },
-  gramsInput: { flex: 1, minWidth: 0, textAlign: 'center', fontFamily: fonts.display, fontSize: 30, borderWidth: 0, backgroundColor: 'transparent', paddingVertical: 2 },
+  gramsInput: { flex: 1, minWidth: 0, textAlign: 'center', fontFamily: fonts.bold, fontSize: 28, borderWidth: 0, backgroundColor: 'transparent', paddingVertical: 2 },
   gramsUnit: { fontFamily: fonts.medium, fontSize: 15, color: colors.muted, marginLeft: -8 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  field: { width: '48.5%', backgroundColor: colors.bg, borderRadius: 14, padding: 10, gap: 4 },
+  field: { width: '48.5%', backgroundColor: colors.chip, borderRadius: 14, padding: 10, gap: 4 },
   dot: { width: 8, height: 8, borderRadius: 4 },
   fieldLabel: { fontFamily: fonts.semibold, fontSize: 12, color: colors.muted },
   fieldInput: { flex: 1, minWidth: 0, borderWidth: 0, backgroundColor: 'transparent', paddingHorizontal: 0, paddingVertical: 2, fontFamily: fonts.bold, fontSize: 18 },

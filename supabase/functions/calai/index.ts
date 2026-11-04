@@ -257,7 +257,7 @@ function productResult(name: string, per: Macros, serving: number | null, pkg: n
     carbs: round1(clamp(per.carbs, 0, 100)),
     fat: round1(clamp(per.fat, 0, 100)),
   };
-  const grams = serving ?? pkg ?? 100;
+  const grams = serving ?? 100;
   const f = grams / 100;
   const totals: Macros = {
     kcal: Math.round(per100g.kcal * f),
