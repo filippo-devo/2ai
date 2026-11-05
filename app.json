@@ -40,6 +40,15 @@
           "microphonePermission": false,
           "recordAudioAndroid": false
         }
+      ],
+      "expo-sharing",
+      [
+        "expo-media-library",
+        {
+          "photosPermission": false,
+          "savePhotosPermission": "Pozwól zapisywać grafiki z posiłkami w galerii.",
+          "isAccessMediaLocationEnabled": false
+        }
       ]
     ],
     "scheme": "calai",

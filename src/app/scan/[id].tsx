@@ -219,6 +219,14 @@ export default function ScanScreen() {
       {/* Dolny pasek jak w Cal AI: Popraw + Gotowe */}
       {entry.status === 'done' && (
         <View style={[s.bottomBar, { paddingBottom: insets.bottom + 12 }]}>
+          <Pressable
+            onPress={() => router.push({ pathname: '/share/[id]', params: { id: entry.id } })}
+            style={({ pressed }) => [s.shareBtn, pressed && { opacity: 0.6 }]}
+            accessibilityRole="button"
+            accessibilityLabel="Udostępnij posiłek"
+          >
+            <Icon name="share-outline" size={20} />
+          </Pressable>
           {canFix && (
             <Pressable
               onPress={() => router.push({ pathname: '/fix/[id]', params: { id: entry.id } })}
@@ -402,6 +410,7 @@ const s = StyleSheet.create({
   addLink: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   addText: { fontFamily: fonts.semibold, fontSize: 14, color: colors.muted },
   bottomBar: { position: 'absolute', left: 0, right: 0, bottom: 0, flexDirection: 'row', gap: 10, paddingHorizontal: 20, paddingTop: 12, backgroundColor: colors.bg, borderTopWidth: 1, borderColor: colors.border },
+  shareBtn: { width: 52, height: 52, borderRadius: 26, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
   fixBtn: { flex: 1, flexDirection: 'row', gap: 6, alignItems: 'center', justifyContent: 'center', borderRadius: 999, borderWidth: 1, borderColor: colors.text, paddingVertical: 15 },
   fixText: { fontFamily: fonts.bold, fontSize: 15, color: colors.text },
   doneBtn: { flex: 1, alignItems: 'center', justifyContent: 'center', borderRadius: 999, backgroundColor: colors.text, paddingVertical: 15 },

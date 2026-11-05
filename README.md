@@ -24,6 +24,7 @@ Na ekranie wyniku:
 - **Liczba porcji** (− / +, krok 0,5).
 - **Miara** dla produktów: porcja, opakowanie albo 100 g.
 - **Edycja składników**: nazwa, gramatura (−/+ 10 g), kalorie i makro. Można też dodać składnik.
+- **Udostępnij** (ikona w dolnym pasku): grafika 1080×1920 w formacie Instagram Story ze zdjęciem, kaloriami i makro, w wersji ciemnej albo jasnej. „Story” i „Więcej” otwierają systemowe menu udostępniania (Instagram, WhatsApp, Wiadomości…). „Zapisz” zapisuje grafikę w galerii. Grafika powstaje jako plik tymczasowy i jest usuwana po udostępnieniu.
 - **Popraw** (dla zdjęć i opisów): opisujesz, co się nie zgadza, np. „brakuje fety, kurczak smażony na maśle”, a model przelicza posiłek jeszcze raz ze zdjęciem.
 
 Pozostałe funkcje:
